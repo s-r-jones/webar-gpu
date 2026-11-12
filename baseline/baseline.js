@@ -134,11 +134,11 @@ const recorderModule = {
   },
   onCameraStatusChange: ({status}) => {
     if (status === 'failed') {
-      showCard({
-        title: 'Camera could not start',
-        text: 'This test needs a phone. Allow camera and motion access, then reload.',
-      })
+      showStartFailure('the camera did not start')
     }
+  },
+  onException: (error) => {
+    showStartFailure(error.permission ? `${error.permission} access was ${error.status}` : String(error.message || error))
   },
 }
 
@@ -197,7 +197,27 @@ function showIntro() {
   })
 }
 
-function startCamera() {
+function showStartFailure(reason) {
+  showCard({
+    title: 'Could not start',
+    text: `The engine reported: ${reason}. This test needs a phone with camera and motion ` +
+      'access allowed for this site. Change that in the browser settings, then reload.',
+  })
+}
+
+// iOS only shows its motion-access prompt when asked directly from a tap, so this runs
+// before the engine starts. Other browsers have no such prompt.
+async function requestMotionAccess() {
+  for (const sensorEvent of [window.DeviceMotionEvent, window.DeviceOrientationEvent]) {
+    if (sensorEvent && sensorEvent.requestPermission) {
+      // A refusal is not handled here: the engine reports it when it starts.
+      await sensorEvent.requestPermission().catch(() => {})
+    }
+  }
+}
+
+async function startCamera() {
+  await requestMotionAccess()
   session.scale = document.getElementById('absolute-scale').checked ? 'absolute' : 'responsive'
   showCard({
     title: 'Finding the room',
