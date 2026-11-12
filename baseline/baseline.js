@@ -53,11 +53,11 @@ const canvas = document.getElementById('camera')
 
 const samples = []
 const memorySamples = []
-// The versions offered on the first screen. Each one keeps the tracker settings of the
-// versions above it and adds its own, so a change in drift can be pinned on one change.
+// The versions offered on the first screen. Each one is the shipped engine with one group
+// of tracker settings changed, so a crash or a change in drift can be pinned on that group.
+// Loop closing (MapBuilder.loopCloseEnabled) is left out: switching it on aborts the engine.
 const VERSIONS = [
   {name: 'Baseline', change: '8th Wall as shipped', settings: {}},
-  {name: '1a', change: 'Loop closing on', settings: {'MapBuilder.loopCloseEnabled': 1}},
   {
     name: '1b',
     change: 'Global adjustment on',
@@ -187,11 +187,13 @@ const recorderModule = {
   },
   onCameraStatusChange: ({status}) => {
     if (status === 'failed') {
-      showStartFailure('the camera did not start')
+      showFailure('The camera did not start. Allow camera access for this site, then reload.')
     }
   },
   onException: (error) => {
-    showStartFailure(error.permission ? `${error.permission} access was ${error.status}` : String(error.message || error))
+    showFailure(error.permission
+      ? `Access to ${error.permission} was ${error.status}. Allow motion access for this site, then reload.`
+      : `The engine crashed: ${error.message || error}`)
   },
 }
 
@@ -260,12 +262,8 @@ function showIntro() {
   })
 }
 
-function showStartFailure(reason) {
-  showCard({
-    title: 'Could not start',
-    text: `The engine reported: ${reason}. This test needs a phone with camera and motion ` +
-      'access allowed for this site. Change that in the browser settings, then reload.',
-  })
+function showFailure(message) {
+  showCard({title: `Version ${session.version} stopped`, text: message})
 }
 
 // iOS only shows its motion-access prompt when asked directly from a tap, so this runs
@@ -310,13 +308,13 @@ async function overrideTrackerSettings() {
 async function startCamera(versionIndex) {
   await requestMotionAccess()
   const version = VERSIONS[versionIndex]
-  trackerSettings = Object.assign({}, ...VERSIONS.slice(0, versionIndex + 1).map(v => v.settings))
+  trackerSettings = version.settings
   Object.assign(session, {version: version.name, versionChange: version.change, trackerSettings})
   if (Object.keys(trackerSettings).length) {
     try {
       await overrideTrackerSettings()
     } catch (error) {
-      showStartFailure(error.message)
+      showFailure(error.message)
       return
     }
   }
