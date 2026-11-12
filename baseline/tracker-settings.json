@@ -1,0 +1,568 @@
+{
+ "settings": {
+  "Alignment.favorCrossCorrelationPeakNearZero": {
+   "address": 606580,
+   "default": 1,
+   "type": "u8"
+  },
+  "Alignment.placeSensorEventsStartAtEnd": {
+   "address": 606584,
+   "default": 1,
+   "type": "u8"
+  },
+  "Bundle.poseEstMaxNumIterations": {
+   "address": 608408,
+   "default": 100,
+   "type": "i32"
+  },
+  "Bundle.useNewPoseEstimationAnalytic": {
+   "address": 608440,
+   "default": 0,
+   "type": "u8"
+  },
+  "BundleAdjustment.minNumKeyframesForPointToAdjust": {
+   "address": 608316,
+   "default": 2,
+   "type": "i32"
+  },
+  "BundleAdjustment.minNumPointsForKeyframeToAdjust": {
+   "address": 608312,
+   "default": 5,
+   "type": "i32"
+  },
+  "BundleAdjustment.numGlobalIterativeIterations": {
+   "address": 608320,
+   "default": 10,
+   "type": "i32"
+  },
+  "BundleAdjustment.numPreviousKeyframesToAdjust": {
+   "address": 608308,
+   "default": 4,
+   "type": "i32"
+  },
+  "BundleAdjustment.useFastPointAdjustmentInGlobalIterative": {
+   "address": 608324,
+   "default": 0,
+   "type": "u8"
+  },
+  "DepthRenderer.onlyRenderFrontFace": {
+   "address": 607464,
+   "default": 0,
+   "type": "u8"
+  },
+  "DepthRenderer.storeLatestNMeshes": {
+   "address": 607460,
+   "default": 0,
+   "type": "i32"
+  },
+  "DetectionImageMatcher.lshKeys": {
+   "address": 606008,
+   "default": 16,
+   "type": "i32"
+  },
+  "DetectionImageMatcher.lshMultiprobe": {
+   "address": 606012,
+   "default": 2,
+   "type": "i32"
+  },
+  "DetectionImageMatcher.lshTables": {
+   "address": 606004,
+   "default": 8,
+   "type": "i32"
+  },
+  "EpipolarMatcher.descriptorDistance": {
+   "address": 613396,
+   "default": 32,
+   "type": "i32"
+  },
+  "FrameFrameTracker.depthPointsFraction": {
+   "address": 607284,
+   "default": 2,
+   "type": "i32"
+  },
+  "FrameFrameTracker.includeDepthPoints": {
+   "address": 607288,
+   "default": 1,
+   "type": "u8"
+  },
+  "FrameFrameTracker.includeSkyPoints": {
+   "address": 607292,
+   "default": 1,
+   "type": "u8"
+  },
+  "FrameFrameTracker.inertialTrackingGroundPointsFraction": {
+   "address": 607276,
+   "default": 6,
+   "type": "i32"
+  },
+  "FrameFrameTracker.inertialTrackingSkyPointsFraction": {
+   "address": 607280,
+   "default": 6,
+   "type": "i32"
+  },
+  "FrameFrameTracker.min2dInliersForDepthEgomotion": {
+   "address": 607308,
+   "default": 80,
+   "type": "i32"
+  },
+  "FrameFrameTracker.minDepthsForDepthEgomotion": {
+   "address": 607300,
+   "default": 10,
+   "type": "i32"
+  },
+  "FramePoint.useInitialDepth": {
+   "address": 613448,
+   "default": 1,
+   "type": "u8"
+  },
+  "GlRealityFrame.PyramidSize": {
+   "address": 531552,
+   "default": 1024,
+   "type": "i32"
+  },
+  "GlobalMatcher.lshKeys": {
+   "address": 613436,
+   "default": 16,
+   "type": "i32"
+  },
+  "GlobalMatcher.lshMultiprobe": {
+   "address": 613440,
+   "default": 2,
+   "type": "i32"
+  },
+  "GlobalMatcher.lshTables": {
+   "address": 613432,
+   "default": 8,
+   "type": "i32"
+  },
+  "GlobalMatcher.maxNumPointsToConsiderMapMatch": {
+   "address": 613444,
+   "default": 3000,
+   "type": "i32"
+  },
+  "MapBuilder.bundleAdjustmentIterativeEnabled": {
+   "address": 606188,
+   "default": 0,
+   "type": "u8"
+  },
+  "MapBuilder.cloudMapKeyframeCooldown": {
+   "address": 606196,
+   "default": 3,
+   "type": "i32"
+  },
+  "MapBuilder.considerSkyPtsInKeyframeCreationCheck": {
+   "address": 606256,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapBuilder.enableGroundPointsForCloudMap": {
+   "address": 606304,
+   "default": 0,
+   "type": "u8"
+  },
+  "MapBuilder.isPruningGroundPointsInMapTracking": {
+   "address": 606224,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapBuilder.keyframeCooldown": {
+   "address": 606192,
+   "default": 5,
+   "type": "i32"
+  },
+  "MapBuilder.keyframeDelay": {
+   "address": 606204,
+   "default": 3,
+   "type": "i32"
+  },
+  "MapBuilder.keyframeLowMapPointCount": {
+   "address": 606208,
+   "default": 120,
+   "type": "i32"
+  },
+  "MapBuilder.keyframeMinimumNewPoints": {
+   "address": 606212,
+   "default": 20,
+   "type": "i32"
+  },
+  "MapBuilder.keyframePairProcessCount": {
+   "address": 606216,
+   "default": 3,
+   "type": "i32"
+  },
+  "MapBuilder.loopCloseEnabled": {
+   "address": 606264,
+   "default": 0,
+   "type": "u8"
+  },
+  "MapBuilder.mapGoodKeyFrameCount": {
+   "address": 606164,
+   "default": 5,
+   "type": "i32"
+  },
+  "MapBuilder.maxNewSkypoints": {
+   "address": 606260,
+   "default": 30,
+   "type": "i32"
+  },
+  "MapBuilder.maxPairSize": {
+   "address": 606240,
+   "default": 100,
+   "type": "i32"
+  },
+  "MapBuilder.maybeCorrectLocalizedExtrinsic": {
+   "address": 606272,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapBuilder.minWorldPointMatchesForSkypoints": {
+   "address": 606252,
+   "default": 30,
+   "type": "i32"
+  },
+  "MapBuilder.noKfInExtremeGyro": {
+   "address": 606160,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapBuilder.numConsecutiveFrameTrackingSuccessesToResetBadMap": {
+   "address": 606176,
+   "default": 7,
+   "type": "i32"
+  },
+  "MapBuilder.numConsecutiveFrameTrackingSuccessesToResetGoodMap": {
+   "address": 606172,
+   "default": 20,
+   "type": "i32"
+  },
+  "MapBuilder.numFramesToResetNonEmptyMap": {
+   "address": 606168,
+   "default": 5,
+   "type": "i32"
+  },
+  "MapBuilder.pairAllKeyframes": {
+   "address": 606292,
+   "default": 0,
+   "type": "u8"
+  },
+  "MapBuilder.redundancyPointCount": {
+   "address": 606296,
+   "default": 3,
+   "type": "i32"
+  },
+  "MapBuilder.relocToKfWithDepthPoints": {
+   "address": 606285,
+   "default": 0,
+   "type": "u8"
+  },
+  "MapBuilder.relocalizationDelay": {
+   "address": 606244,
+   "default": 30,
+   "type": "i32"
+  },
+  "MapBuilder.requireMinimumForSkypoints": {
+   "address": 606248,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapBuilder.useGraphToAnchorNodes": {
+   "address": 606284,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapBuilder.useTwoVpsLocalizationsForMapScaling": {
+   "address": 606286,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapTracker.cloudMapRelocTargetFps": {
+   "address": 607228,
+   "default": 25,
+   "type": "i32"
+  },
+  "MapTracker.inertialTracking": {
+   "address": 607204,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapTracker.initialFrameDelay": {
+   "address": 607208,
+   "default": 10,
+   "type": "i32"
+  },
+  "MapTracker.maxPoints": {
+   "address": 607212,
+   "default": 400,
+   "type": "i32"
+  },
+  "MapTracker.maxPointsForSecondPassTracking": {
+   "address": 607272,
+   "default": 5000,
+   "type": "i32"
+  },
+  "MapTracker.minCloudPointsForSecretRelocalization": {
+   "address": 607264,
+   "default": 20,
+   "type": "i32"
+  },
+  "MapTracker.minGroundPointsForScale": {
+   "address": 607216,
+   "default": 8,
+   "type": "i32"
+  },
+  "MapTracker.relocToDepthKfDist": {
+   "address": 607256,
+   "default": 76,
+   "type": "i32"
+  },
+  "MapTracker.samplePointsForSecondPassTracking": {
+   "address": 607268,
+   "default": 1,
+   "type": "u8"
+  },
+  "MapTracker.useExternalRelocalizationExtrinsic": {
+   "address": 607260,
+   "default": 0,
+   "type": "u8"
+  },
+  "MapTracker.useFFTForExtremeMovement": {
+   "address": 607244,
+   "default": 1,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.activeThresholdCheck": {
+   "address": 606484,
+   "default": 0,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.estimateScaleAfterHaveEstimate": {
+   "address": 606452,
+   "default": 0,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.fallbackTo60Hz": {
+   "address": 606470,
+   "default": 1,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.imuRemoveBias": {
+   "address": 606516,
+   "default": 0,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.maxFramesInQueue": {
+   "address": 606456,
+   "default": 2000,
+   "type": "i32"
+  },
+  "MetricScaleEstimator.numEndFramesToSkip": {
+   "address": 606460,
+   "default": 25,
+   "type": "i32"
+  },
+  "MetricScaleEstimator.outOfBoundReset": {
+   "address": 606532,
+   "default": 1,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.placeWithInteval": {
+   "address": 606469,
+   "default": 1,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.scaleEstimationMethod": {
+   "address": 606476,
+   "default": 1,
+   "type": "i32"
+  },
+  "MetricScaleEstimator.scalePredictionFrameNumber": {
+   "address": 606464,
+   "default": 50,
+   "type": "i32"
+  },
+  "MetricScaleEstimator.sumCheck": {
+   "address": 606500,
+   "default": 1,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.temporalAlignment": {
+   "address": 606468,
+   "default": 1,
+   "type": "u8"
+  },
+  "MetricScaleEstimator.useFpsScalingIfIos": {
+   "address": 606533,
+   "default": 1,
+   "type": "u8"
+  },
+  "PosePnP.solveOptimalPoseUseAnalytical": {
+   "address": 608236,
+   "default": 0,
+   "type": "u8"
+  },
+  "VioTracker.cloudMapRelocNumPoints": {
+   "address": 531852,
+   "default": 500,
+   "type": "i32"
+  },
+  "VioTracker.disableMapBuilder": {
+   "address": 531844,
+   "default": 0,
+   "type": "u8"
+  },
+  "VioTracker.numIncreasedFramePoints": {
+   "address": 531848,
+   "default": 1000,
+   "type": "i32"
+  },
+  "VioTracker.trackingDescriptorType": {
+   "address": 531860,
+   "default": 2,
+   "type": "i32"
+  },
+  "VpsRequestManager.getGraphMaxNodes": {
+   "address": 612600,
+   "default": 0,
+   "type": "i32"
+  },
+  "VpsRequestManager.getGraphRadius": {
+   "address": 612596,
+   "default": 20,
+   "type": "i32"
+  },
+  "WorldMap.adjustPoints": {
+   "address": 613365,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMap.adjustUntriangulatedPoints": {
+   "address": 613364,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMap.requiredPointsForCovisibility": {
+   "address": 613360,
+   "default": 10,
+   "type": "i32"
+  },
+  "WorldMaps.allowTenuredSkypoints": {
+   "address": 608097,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMaps.alwaysProjectCloudPointDescriptor": {
+   "address": 608129,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMaps.cloudMapGlobalMatcherDistanceThreshold": {
+   "address": 608100,
+   "default": 64,
+   "type": "i32"
+  },
+  "WorldMaps.cloudMapMaxSubsetPoints": {
+   "address": 608036,
+   "default": 100,
+   "type": "i32"
+  },
+  "WorldMaps.dedupDictionaryMatches": {
+   "address": 608128,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMaps.enableLostLocalMatcher": {
+   "address": 608099,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMaps.enableUntenureInsteadOfPrune": {
+   "address": 608098,
+   "default": 0,
+   "type": "u8"
+  },
+  "WorldMaps.encouragedNGroundPoints": {
+   "address": 608068,
+   "default": 52,
+   "type": "i32"
+  },
+  "WorldMaps.findOrbMatchesThreshold": {
+   "address": 607988,
+   "default": 200,
+   "type": "i32"
+  },
+  "WorldMaps.fullMapGlobalMatcherDistanceThreshold": {
+   "address": 608124,
+   "default": 64,
+   "type": "i32"
+  },
+  "WorldMaps.loopClosingMatchesRequired": {
+   "address": 608000,
+   "default": 75,
+   "type": "i32"
+  },
+  "WorldMaps.loopClosingPoseEstimationPointsRequired": {
+   "address": 608004,
+   "default": 35,
+   "type": "i32"
+  },
+  "WorldMaps.matchMinimum": {
+   "address": 607976,
+   "default": 5,
+   "type": "i32"
+  },
+  "WorldMaps.maxKeyframesInMap": {
+   "address": 608092,
+   "default": 64,
+   "type": "i32"
+  },
+  "WorldMaps.maxSubsetPoints": {
+   "address": 608032,
+   "default": 75,
+   "type": "i32"
+  },
+  "WorldMaps.popCountMatchThreshold": {
+   "address": 608132,
+   "default": 16,
+   "type": "i32"
+  },
+  "WorldMaps.preventPruning": {
+   "address": 608096,
+   "default": 0,
+   "type": "u8"
+  },
+  "WorldMaps.ransacCountFailure": {
+   "address": 608116,
+   "default": 1,
+   "type": "u8"
+  },
+  "WorldMaps.ransacMaxNumIteration": {
+   "address": 608120,
+   "default": 2500,
+   "type": "i32"
+  },
+  "WorldMaps.ransacMinInlierRequired": {
+   "address": 608112,
+   "default": 14,
+   "type": "i32"
+  },
+  "WorldMaps.requiredTrackingCount": {
+   "address": 608080,
+   "default": 8,
+   "type": "i32"
+  },
+  "WorldMaps.tenureKeyframeCount": {
+   "address": 608088,
+   "default": 5,
+   "type": "i32"
+  },
+  "WorldMaps.weightByDepthConfidence": {
+   "address": 608012,
+   "default": 1,
+   "type": "u8"
+  }
+ },
+ "signature": {
+  "address": 38927,
+  "text": "MapBuilder.loopCloseEnabled"
+ }
+}

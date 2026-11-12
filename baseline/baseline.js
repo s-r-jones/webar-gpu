@@ -53,7 +53,15 @@ const canvas = document.getElementById('camera')
 
 const samples = []
 const memorySamples = []
+// Tracker settings given in the page address, for example
+// ?set=MapBuilder.loopCloseEnabled:1,WorldMaps.maxKeyframesInMap:128
+const requestedSettings = Object.fromEntries(
+  (new URLSearchParams(location.search).get('set') || '').split(',').filter(Boolean)
+    .map(pair => pair.split(':'))
+)
+
 const session = {
+  trackerSettings: requestedSettings,
   page: 'slam-baseline',
   engine: '8th Wall XR Engine binary',
   startedAt: new Date().toISOString(),
@@ -200,12 +208,16 @@ function showCard({step, title, text, html = '', buttons = []}) {
   }
 }
 
+const settingsSummary = () =>
+  Object.entries(requestedSettings).map(([name, value]) => `${name} = ${value}`).join(', ')
+
 function showIntro() {
   showCard({
     title: 'SLAM baseline',
     text: 'Takes about a minute. After you tap Start the steps run by themselves: hold ' +
       'still, walk a loop back to where you started, cover the camera.',
     html: `
+      ${settingsSummary() ? `<p>Tracker settings: ${settingsSummary()}</p>` : ''}
       <label><input type="checkbox" id="absolute-scale">Measure in metres (slower to start)</label>
       <p class="licence">World tracking by the 8th Wall XR Engine, © Niantic Spatial, Inc.
         <a href="xr/LICENSE">Licence</a></p>`,
@@ -232,8 +244,46 @@ async function requestMotionAccess() {
   }
 }
 
+// The engine offers no way to change its tuning settings, but it keeps each one at a fixed
+// place in its memory and reads it from there. It fills those places with defaults once,
+// when tracking starts, so the requested values are written repeatedly.
+async function overrideTrackerSettings() {
+  const table = await fetch('tracker-settings.json').then(response => response.json())
+  const unknown = Object.keys(requestedSettings).filter(name => !table.settings[name])
+  if (unknown.length) {
+    throw new Error(`unknown tracker setting ${unknown.join(', ')}`)
+  }
+  const {address, text} = table.signature
+  setInterval(() => {
+    // Looked up every time: the tracker's memory appears when its module loads, and its
+    // buffer is replaced whenever the heap grows.
+    const trackerMemory = window.capturedWasmMemories.find(memory =>
+      new TextDecoder().decode(new Uint8Array(memory.buffer, address, text.length)) === text)
+    if (!trackerMemory) {
+      return
+    }
+    const view = new DataView(trackerMemory.buffer)
+    for (const [name, value] of Object.entries(requestedSettings)) {
+      const setting = table.settings[name]
+      if (setting.type === 'u8') {
+        view.setUint8(setting.address, Number(value))
+      } else {
+        view.setInt32(setting.address, Number(value), true)
+      }
+    }
+  }, 100)
+}
+
 async function startCamera() {
   await requestMotionAccess()
+  if (Object.keys(requestedSettings).length) {
+    try {
+      await overrideTrackerSettings()
+    } catch (error) {
+      showStartFailure(error.message)
+      return
+    }
+  }
   session.scale = document.getElementById('absolute-scale').checked ? 'absolute' : 'responsive'
   showCard({
     title: 'Finding the room',
@@ -311,6 +361,7 @@ function resultSections() {
   const {frames, memory} = session
   const number = (value, digits, unit) => `${value.toFixed(digits)} ${unit}`
   return [
+    ['Tracker settings', [[settingsSummary() || 'engine defaults', '']]],
     ['Walk a loop', [
       ['Drift, share of path', number(loop.closureErrorPercentOfPath, 2, '%')],
       ['Drift, distance', number(loop.closureError, 3, length)],
