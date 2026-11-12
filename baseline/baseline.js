@@ -3,32 +3,47 @@
 /* global XR8 */
 import * as THREE from 'three'
 import {
-  summarizeFrames, summarizeHoldStill, summarizeLensCover, summarizeLoop,
+  hasWalkedAndStopped, summarizeFrames, summarizeHoldStill, summarizeLensCover, summarizeLoop,
 } from './measurements.js'
 
 window.THREE = THREE  // XR8.Threejs reads three.js from the global.
 
-const TESTS = [
+// The steps run by themselves, one after another, with the phone held in the hand.
+// Consecutive steps with the same `test` are measured together as that test.
+const STEPS = [
   {
-    key: 'holdStill',
+    title: 'Get ready',
+    text: 'Stand on a spot you can find again, like the corner of a floor tile. Hold the ' +
+      'phone against your chest, camera facing the room.',
+    seconds: 5,
+  },
+  {
+    test: 'holdStill',
     title: 'Hold still',
-    instruction: 'Prop the phone on your start mark so it cannot move, camera facing the room. ' +
-      'Tap Begin and leave it alone for 10 seconds.',
-    seconds: 10,
+    text: 'Keep the phone against your chest and stand as still as you can.',
+    seconds: 5,
     summarize: summarizeHoldStill,
   },
   {
-    key: 'loop',
+    test: 'loop',
     title: 'Walk a loop',
-    instruction: 'With the phone on the start mark, tap Begin. Pick it up, walk your loop, put ' +
-      'it back on the mark exactly as it was, then tap End.',
+    text: 'Walk a loop around the room without stopping, then come back to your spot and ' +
+      'stand still. The test ends by itself.',
+    isFinished: hasWalkedAndStopped,
     summarize: summarizeLoop,
   },
   {
-    key: 'lensCover',
-    title: 'Cover the lens',
-    instruction: 'Leave the phone on the mark. Tap Begin, cover the camera for 3 seconds, ' +
-      'uncover it, wait for the picture to settle, then tap End.',
+    test: 'lensCover',
+    title: 'Cover the camera',
+    text: 'Stay on your spot and cover the camera lens with your hand.',
+    seconds: 4,
+    summarize: summarizeLensCover,
+  },
+  {
+    test: 'lensCover',
+    title: 'Uncover the camera',
+    text: 'Take your hand away and stand still.',
+    seconds: 5,
     summarize: summarizeLensCover,
   },
 ]
@@ -51,6 +66,7 @@ const session = {
 let runStartedAt = 0
 let trackerGpuStepMs = null
 let trackerCpuStepMs = null
+let firstSampleOfTest = 0
 let marker = null
 let camera = null
 
@@ -129,7 +145,7 @@ const recorderModule = {
     trackerCpuStepMs = null
     if (session.secondsToFirstTracking === undefined && reality.trackingStatus === 'NORMAL') {
       session.secondsToFirstTracking = samples.at(-1).seconds
-      showTest(0)
+      runStep(0)
     }
   },
   onCameraStatusChange: ({status}) => {
@@ -187,8 +203,8 @@ function showCard({step, title, text, html = '', buttons = []}) {
 function showIntro() {
   showCard({
     title: 'SLAM baseline',
-    text: 'Mark a spot on a table or shelf where the phone can be propped upright. Every ' +
-      'test starts and ends with the phone on that mark.',
+    text: 'Takes about a minute. After you tap Start the steps run by themselves: hold ' +
+      'still, walk a loop back to where you started, cover the camera.',
     html: `
       <label><input type="checkbox" id="absolute-scale">Measure in metres (slower to start)</label>
       <p class="licence">World tracking by the 8th Wall XR Engine, © Niantic Spatial, Inc.
@@ -225,6 +241,7 @@ async function startCamera() {
   })
   XR8.XrController.configure({enableWorldPoints: true, scale: session.scale})
   XR8.addCameraPipelineModules([
+    XR8.FullWindowCanvas.pipelineModule(),
     XR8.GlTextureRenderer.pipelineModule(),
     XR8.Threejs.pipelineModule(),
     timedTracker(),
@@ -238,33 +255,51 @@ async function startCamera() {
   setInterval(updateReadout, 250)
 }
 
-function showTest(index) {
-  const test = TESTS[index]
-  const step = `Test ${index + 1} of ${TESTS.length}`
-  const finish = (firstSample) => {
-    session.tests[test.key] = test.summarize(samples.slice(firstSample))
-    if (index + 1 < TESTS.length) {
-      showTest(index + 1)
-    } else {
-      showResults()
-    }
+function runStep(index) {
+  if (index === STEPS.length) {
+    showResults()
+    return
   }
-  const begin = () => {
-    const firstSample = samples.length
+  const step = STEPS[index]
+  const continuesTest = index > 0 && STEPS[index - 1].test === step.test
+  if (step.test && !continuesTest) {
+    firstSampleOfTest = samples.length
     dropMarker()
-    if (test.seconds) {
-      showCard({step, title: test.title, text: `Recording for ${test.seconds} seconds. Do not touch the phone.`})
-      setTimeout(() => finish(firstSample), test.seconds * 1000)
-    } else {
-      showCard({
-        step,
-        title: test.title,
-        text: test.instruction,
-        buttons: [{label: 'End', onTap: () => finish(firstSample)}],
-      })
-    }
   }
-  showCard({step, title: test.title, text: test.instruction, buttons: [{label: 'Begin', onTap: begin}]})
+  const label = `Step ${index + 1} of ${STEPS.length}`
+  const startedAt = performance.now()
+
+  const finish = () => {
+    clearInterval(timer)
+    const nextStep = STEPS[index + 1]
+    if (step.test && !(nextStep && nextStep.test === step.test)) {
+      session.tests[step.test] = step.summarize(samples.slice(firstSampleOfTest))
+    }
+    runStep(index + 1)
+  }
+  const timer = setInterval(() => {
+    if (step.seconds) {
+      const secondsLeft = step.seconds - (performance.now() - startedAt) / 1000
+      card.querySelector('.step').textContent = `${label} · ${Math.ceil(secondsLeft)} s`
+      if (secondsLeft <= 0) {
+        finish()
+      }
+    } else if (step.isFinished(samples.slice(firstSampleOfTest))) {
+      finish()
+    }
+  }, 200)
+
+  showCard({
+    step: label,
+    title: step.title,
+    text: step.text,
+    // A way out if the automatic ending does not trigger.
+    buttons: step.seconds ? [] : [{label: 'I am back', secondary: true, onTap: finish}],
+  })
+  // The user is looking at the room, not the screen. Android only.
+  if (navigator.vibrate) {
+    navigator.vibrate(200)
+  }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -287,7 +322,7 @@ function resultSections() {
       ['Position jitter (RMS)', number(holdStill.positionJitterRms, 4, length)],
       ['Position jitter (max)', number(holdStill.positionJitterMax, 4, length)],
       ['Rotation jitter (RMS)', number(holdStill.rotationJitterRmsDegrees, 3, '°')],
-      ['Creep over 10 s', number(holdStill.positionCreep, 4, length)],
+      ['Creep over 5 s', number(holdStill.positionCreep, 4, length)],
     ]],
     ['Cover the lens', [
       ['Time not tracking', number(lensCover.secondsNotTracking, 1, 's')],

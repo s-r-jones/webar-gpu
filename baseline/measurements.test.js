@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
 import {
-  angleBetweenRotationsDegrees, summarizeFrames, summarizeHoldStill, summarizeLensCover,
+  angleBetweenRotationsDegrees, hasWalkedAndStopped, summarizeFrames, summarizeHoldStill, summarizeLensCover,
   summarizeLoop,
 } from './measurements.js'
 
@@ -117,4 +117,19 @@ test('frames: separates display rate from tracker rate and finds stalls', () => 
   close(result.trackerCpuStepMeanMs, 5)
   close(result.displayFramesPerSecond, 120 / result.seconds)
   close(result.trackerFramesPerSecond, 61 / result.seconds)
+})
+
+test('loop ends by itself only after walking and then standing still', () => {
+  const walking = []
+  for (let i = 0; i <= 50; i++) {
+    walking.push(sample(i * 0.1, i * 0.1, 0, 0))
+  }
+  assert.equal(hasWalkedAndStopped(walking.slice(0, 20)), false)  // 2 units walked
+  assert.equal(hasWalkedAndStopped(walking), false)  // 5 units, still moving
+  const stopped = [...walking]
+  for (let i = 1; i <= 25; i++) {
+    stopped.push(sample(5 + i * 0.1, 5, 0, 0))
+  }
+  assert.equal(hasWalkedAndStopped(stopped), true)
+  assert.equal(hasWalkedAndStopped([]), false)
 })
