@@ -56,6 +56,13 @@ const memorySamples = []
 // The versions offered on the first screen. Each one is the shipped engine with one group
 // of tracker settings changed, so a crash or a change in drift can be pinned on that group.
 // Loop closing (MapBuilder.loopCloseEnabled) is left out: switching it on aborts the engine.
+const MORE_SOLVE_POINTS = {'WorldMaps.maxSubsetPoints': 150, 'WorldMaps.encouragedNGroundPoints': 20}
+const TIGHTER_LOSS = {
+  'MapTracker.trackingLostThreshold': 0.002,
+  'Bundle.rotationWt': 0.1,
+  'Bundle.positionWt': 0.02,
+}
+
 const VERSIONS = [
   {name: 'Baseline', change: '8th Wall as shipped', settings: {}},
   {
@@ -72,18 +79,17 @@ const VERSIONS = [
       'MapBuilder.numConsecutiveFrameTrackingSuccessesToResetGoodMap': 200,
     },
   },
+  {name: '1d', change: 'More solve points, fewer floor points', settings: MORE_SOLVE_POINTS},
+  {name: '1e', change: 'Tighter loss, weaker gyro pull', settings: TIGHTER_LOSS},
+  {name: '2a', change: '1d + 1e', settings: {...MORE_SOLVE_POINTS, ...TIGHTER_LOSS}},
   {
-    name: '1d',
-    change: 'More solve points, fewer floor points',
-    settings: {'WorldMaps.maxSubsetPoints': 150, 'WorldMaps.encouragedNGroundPoints': 20},
-  },
-  {
-    name: '1e',
-    change: 'Tighter loss, weaker gyro pull',
+    name: '2b',
+    change: '2a + global adjustment, 3 rounds',
     settings: {
-      'MapTracker.trackingLostThreshold': 0.002,
-      'Bundle.rotationWt': 0.1,
-      'Bundle.positionWt': 0.02,
+      ...MORE_SOLVE_POINTS,
+      ...TIGHTER_LOSS,
+      'MapBuilder.bundleAdjustmentIterativeEnabled': 1,
+      'BundleAdjustment.numGlobalIterativeIterations': 3,
     },
   },
 ]
