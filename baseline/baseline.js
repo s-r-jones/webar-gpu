@@ -53,15 +53,44 @@ const canvas = document.getElementById('camera')
 
 const samples = []
 const memorySamples = []
-// Tracker settings given in the page address, for example
-// ?set=MapBuilder.loopCloseEnabled:1,WorldMaps.maxKeyframesInMap:128
-const requestedSettings = Object.fromEntries(
-  (new URLSearchParams(location.search).get('set') || '').split(',').filter(Boolean)
-    .map(pair => pair.split(':'))
-)
+// The versions offered on the first screen. Each one keeps the tracker settings of the
+// versions above it and adds its own, so a change in drift can be pinned on one change.
+const VERSIONS = [
+  {name: 'Baseline', change: '8th Wall as shipped', settings: {}},
+  {name: '1a', change: 'Loop closing on', settings: {'MapBuilder.loopCloseEnabled': 1}},
+  {
+    name: '1b',
+    change: 'Global adjustment on',
+    settings: {'MapBuilder.bundleAdjustmentIterativeEnabled': 1},
+  },
+  {
+    name: '1c',
+    change: 'Keep the map longer',
+    settings: {
+      'WorldMaps.maxKeyframesInMap': 128,
+      'MapBuilder.numFramesToResetNonEmptyMap': 60,
+      'MapBuilder.numConsecutiveFrameTrackingSuccessesToResetGoodMap': 200,
+    },
+  },
+  {
+    name: '1d',
+    change: 'More solve points, fewer floor points',
+    settings: {'WorldMaps.maxSubsetPoints': 150, 'WorldMaps.encouragedNGroundPoints': 20},
+  },
+  {
+    name: '1e',
+    change: 'Tighter loss, weaker gyro pull',
+    settings: {
+      'MapTracker.trackingLostThreshold': 0.002,
+      'Bundle.rotationWt': 0.1,
+      'Bundle.positionWt': 0.02,
+    },
+  },
+]
+
+let trackerSettings = {}
 
 const session = {
-  trackerSettings: requestedSettings,
   page: 'slam-baseline',
   engine: '8th Wall XR Engine binary',
   startedAt: new Date().toISOString(),
@@ -199,29 +228,35 @@ function showCard({step, title, text, html = '', buttons = []}) {
     <h1>${title}</h1>
     ${text ? `<p>${text}</p>` : ''}
     ${html}`
-  for (const {label, onTap, secondary} of buttons) {
+  for (const {label, detail, onTap, secondary} of buttons) {
     const button = document.createElement('button')
     button.textContent = label
+    if (detail) {
+      const detailLine = document.createElement('small')
+      detailLine.textContent = detail
+      button.append(detailLine)
+    }
     button.className = secondary ? 'secondary' : ''
     button.onclick = () => onTap(button)
     card.append(button)
   }
 }
 
-const settingsSummary = () =>
-  Object.entries(requestedSettings).map(([name, value]) => `${name} = ${value}`).join(', ')
-
 function showIntro() {
   showCard({
     title: 'SLAM baseline',
-    text: 'Takes about a minute. After you tap Start the steps run by themselves: hold ' +
-      'still, walk a loop back to where you started, cover the camera.',
+    text: 'Tap a version to test it. The test takes about a minute and runs by itself: ' +
+      'hold still, walk a loop back to where you started, cover the camera.',
     html: `
-      ${settingsSummary() ? `<p>Tracker settings: ${settingsSummary()}</p>` : ''}
       <label><input type="checkbox" id="absolute-scale">Measure in metres (slower to start)</label>
       <p class="licence">World tracking by the 8th Wall XR Engine, © Niantic Spatial, Inc.
         <a href="xr/LICENSE">Licence</a></p>`,
-    buttons: [{label: 'Start camera', onTap: startCamera}],
+    buttons: VERSIONS.map((version, index) => ({
+      label: version.name,
+      detail: version.change,
+      secondary: index > 0,
+      onTap: () => startCamera(index),
+    })),
   })
 }
 
@@ -251,7 +286,7 @@ const DATA_VIEW_SETTER = {u8: 'setUint8', i32: 'setInt32', f32: 'setFloat32', f6
 
 async function overrideTrackerSettings() {
   const table = await fetch('tracker-settings.json').then(response => response.json())
-  const unknown = Object.keys(requestedSettings).filter(name => !table.settings[name])
+  const unknown = Object.keys(trackerSettings).filter(name => !table.settings[name])
   if (unknown.length) {
     throw new Error(`unknown tracker setting ${unknown.join(', ')}`)
   }
@@ -265,16 +300,19 @@ async function overrideTrackerSettings() {
       return
     }
     const view = new DataView(trackerMemory.buffer)
-    for (const [name, value] of Object.entries(requestedSettings)) {
+    for (const [name, value] of Object.entries(trackerSettings)) {
       const {address: settingAddress, type} = table.settings[name]
-      view[DATA_VIEW_SETTER[type]](settingAddress, Number(value), true)
+      view[DATA_VIEW_SETTER[type]](settingAddress, value, true)
     }
   }, 100)
 }
 
-async function startCamera() {
+async function startCamera(versionIndex) {
   await requestMotionAccess()
-  if (Object.keys(requestedSettings).length) {
+  const version = VERSIONS[versionIndex]
+  trackerSettings = Object.assign({}, ...VERSIONS.slice(0, versionIndex + 1).map(v => v.settings))
+  Object.assign(session, {version: version.name, versionChange: version.change, trackerSettings})
+  if (Object.keys(trackerSettings).length) {
     try {
       await overrideTrackerSettings()
     } catch (error) {
@@ -359,7 +397,7 @@ function resultSections() {
   const {frames, memory} = session
   const number = (value, digits, unit) => `${value.toFixed(digits)} ${unit}`
   return [
-    ['Tracker settings', [[settingsSummary() || 'engine defaults', '']]],
+    ['Version', [[`${session.version}: ${session.versionChange}`, '']]],
     ['Walk a loop', [
       ['Drift, share of path', number(loop.closureErrorPercentOfPath, 2, '%')],
       ['Drift, distance', number(loop.closureError, 3, length)],
