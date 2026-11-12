@@ -74,15 +74,21 @@ function secondsNotTracking(samples) {
   return seconds
 }
 
-// Ends the loop test without a tap: true once the phone has travelled at least 3 units
-// and then moved less than 0.1 units over the last 2 seconds. One unit is roughly the
-// phone's height above the floor, or a metre in absolute scale.
+// Ends the loop test without a tap: true once the phone has been at least 1 unit away
+// from where it started and has then stayed within 0.1 units of one place for 2 seconds.
+// One unit is roughly the phone's height above the floor, or a metre in absolute scale.
+// Distances from a fixed point are used, not path length, so tracker jitter cannot add up.
 export function hasWalkedAndStopped(samples) {
-  if (samples.length === 0 || pathLength(samples) < 3) {
+  if (samples.length === 0) {
     return false
   }
-  const lastTwoSeconds = samples.filter(sample => sample.seconds > samples.at(-1).seconds - 2)
-  return pathLength(lastTwoSeconds) < 0.1
+  const start = samples[0].position
+  const latest = samples.at(-1)
+  const wentAway = samples.some(sample => distance(sample.position, start) >= 1)
+  const lastTwoSeconds = samples.filter(sample => sample.seconds > latest.seconds - 2)
+  const stayedPut = latest.seconds - samples[0].seconds >= 2 &&
+    lastTwoSeconds.every(sample => distance(sample.position, latest.position) < 0.1)
+  return wentAway && stayedPut
 }
 
 // The phone is held still, so reported motion is tracker error plus hand tremor.

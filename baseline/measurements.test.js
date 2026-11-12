@@ -124,8 +124,11 @@ test('loop ends by itself only after walking and then standing still', () => {
   for (let i = 0; i <= 50; i++) {
     walking.push(sample(i * 0.1, i * 0.1, 0, 0))
   }
-  assert.equal(hasWalkedAndStopped(walking.slice(0, 20)), false)  // 2 units walked
-  assert.equal(hasWalkedAndStopped(walking), false)  // 5 units, still moving
+  assert.equal(hasWalkedAndStopped(walking.slice(0, 8)), false)  // under 1 unit away
+  assert.equal(hasWalkedAndStopped(walking), false)  // 5 units away, still moving
+  // Standing still at the start with jitter never counts as having walked.
+  const jitter = Array.from({length: 600}, (_, i) => sample(i / 60, i % 2 ? 0.02 : -0.02, 0, 0))
+  assert.equal(hasWalkedAndStopped(jitter), false)
   const stopped = [...walking]
   for (let i = 1; i <= 25; i++) {
     stopped.push(sample(5 + i * 0.1, 5, 0, 0))

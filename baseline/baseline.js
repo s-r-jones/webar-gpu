@@ -14,13 +14,13 @@ const STEPS = [
   {
     title: 'Get ready',
     text: 'Stand on a spot you can find again, like the corner of a floor tile. Hold the ' +
-      'phone against your chest, camera facing the room.',
+      'phone in both hands in front of your chest, elbows tucked in, camera facing the room.',
     seconds: 5,
   },
   {
     test: 'holdStill',
     title: 'Hold still',
-    text: 'Keep the phone against your chest and stand as still as you can.',
+    text: 'Keep the phone where it is and stand as still as you can.',
     seconds: 5,
     summarize: summarizeHoldStill,
   },
