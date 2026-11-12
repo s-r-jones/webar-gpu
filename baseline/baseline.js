@@ -247,6 +247,8 @@ async function requestMotionAccess() {
 // The engine offers no way to change its tuning settings, but it keeps each one at a fixed
 // place in its memory and reads it from there. It fills those places with defaults once,
 // when tracking starts, so the requested values are written repeatedly.
+const DATA_VIEW_SETTER = {u8: 'setUint8', i32: 'setInt32', f32: 'setFloat32', f64: 'setFloat64'}
+
 async function overrideTrackerSettings() {
   const table = await fetch('tracker-settings.json').then(response => response.json())
   const unknown = Object.keys(requestedSettings).filter(name => !table.settings[name])
@@ -264,12 +266,8 @@ async function overrideTrackerSettings() {
     }
     const view = new DataView(trackerMemory.buffer)
     for (const [name, value] of Object.entries(requestedSettings)) {
-      const setting = table.settings[name]
-      if (setting.type === 'u8') {
-        view.setUint8(setting.address, Number(value))
-      } else {
-        view.setInt32(setting.address, Number(value), true)
-      }
+      const {address: settingAddress, type} = table.settings[name]
+      view[DATA_VIEW_SETTER[type]](settingAddress, Number(value), true)
     }
   }, 100)
 }

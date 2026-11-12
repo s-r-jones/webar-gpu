@@ -1,24 +1,129 @@
 {
  "settings": {
+  "Alignment.crossCorrelationTimeoffsetCutoff": {
+   "address": 606576,
+   "default": 0.5,
+   "type": "f32"
+  },
   "Alignment.favorCrossCorrelationPeakNearZero": {
    "address": 606580,
    "default": 1,
    "type": "u8"
+  },
+  "Alignment.fpsAlpha": {
+   "address": 606588,
+   "default": 489.0,
+   "type": "f32"
+  },
+  "Alignment.kalmanAngularAccelTransition": {
+   "address": 606572,
+   "default": 0.8999999761581421,
+   "type": "f32"
+  },
+  "Alignment.kalmanAngularMeasurementNoiseStdDev": {
+   "address": 606568,
+   "default": 0.5,
+   "type": "f32"
+  },
+  "Alignment.kalmanAngularProcessNoiseAccelStdDev": {
+   "address": 606564,
+   "default": 0.5,
+   "type": "f32"
+  },
+  "Alignment.kalmanAngularProcessNoiseVelStdDev": {
+   "address": 606560,
+   "default": 0.20000000298023224,
+   "type": "f32"
+  },
+  "Alignment.kalmanPositionAccelTransition": {
+   "address": 606556,
+   "default": 0.8999999761581421,
+   "type": "f32"
+  },
+  "Alignment.kalmanPositionMeasurementNoiseStdDev": {
+   "address": 606552,
+   "default": 0.10000000149011612,
+   "type": "f32"
+  },
+  "Alignment.kalmanPositionProcessNoiseAccelStdDev": {
+   "address": 606548,
+   "default": 0.8999999761581421,
+   "type": "f32"
+  },
+  "Alignment.kalmanPositionProcessNoisePosStdDev": {
+   "address": 606540,
+   "default": 0.0,
+   "type": "f32"
+  },
+  "Alignment.kalmanPositionProcessNoiseVelStdDev": {
+   "address": 606544,
+   "default": 0.0,
+   "type": "f32"
   },
   "Alignment.placeSensorEventsStartAtEnd": {
    "address": 606584,
    "default": 1,
    "type": "u8"
   },
+  "Bundle.poseEstCauchyLoss": {
+   "address": 608400,
+   "default": 0.01,
+   "type": "f64"
+  },
+  "Bundle.poseEstFunctionTolerance": {
+   "address": 608416,
+   "default": 1e-10,
+   "type": "f64"
+  },
+  "Bundle.poseEstGradientTolerance": {
+   "address": 608424,
+   "default": 1e-10,
+   "type": "f64"
+  },
+  "Bundle.poseEstHuberLossComposed": {
+   "address": 608448,
+   "default": 0.00088,
+   "type": "f64"
+  },
   "Bundle.poseEstMaxNumIterations": {
    "address": 608408,
    "default": 100,
    "type": "i32"
   },
+  "Bundle.poseEstParameterTolerance": {
+   "address": 608432,
+   "default": 1e-06,
+   "type": "f64"
+  },
+  "Bundle.positionRobust": {
+   "address": 608384,
+   "default": 0.3,
+   "type": "f64"
+  },
+  "Bundle.positionWt": {
+   "address": 608392,
+   "default": 0.05,
+   "type": "f64"
+  },
+  "Bundle.rotationRobust": {
+   "address": 608368,
+   "default": 0.3,
+   "type": "f64"
+  },
+  "Bundle.rotationWt": {
+   "address": 608376,
+   "default": 0.3,
+   "type": "f64"
+  },
   "Bundle.useNewPoseEstimationAnalytic": {
    "address": 608440,
    "default": 0,
    "type": "u8"
+  },
+  "BundleAdjustment.cameraMotionWeight": {
+   "address": 608304,
+   "default": 10.0,
+   "type": "f32"
   },
   "BundleAdjustment.minNumKeyframesForPointToAdjust": {
    "address": 608316,
@@ -55,6 +160,11 @@
    "default": 0,
    "type": "i32"
   },
+  "DetectionImageLoader.minRollAngleFromXZPlaneForGorb": {
+   "address": 531540,
+   "default": 2.0,
+   "type": "f32"
+  },
   "DetectionImageMatcher.lshKeys": {
    "address": 606008,
    "default": 16,
@@ -74,6 +184,11 @@
    "address": 613396,
    "default": 32,
    "type": "i32"
+  },
+  "EpipolarMatcher.radius": {
+   "address": 613392,
+   "default": 0.009999999776482582,
+   "type": "f32"
   },
   "FrameFrameTracker.depthPointsFraction": {
    "address": 607284,
@@ -100,15 +215,55 @@
    "default": 6,
    "type": "i32"
   },
+  "FrameFrameTracker.maxMotionThreshold": {
+   "address": 607296,
+   "default": 0.5,
+   "type": "f32"
+  },
+  "FrameFrameTracker.maxTranslationForHomographyDepthEgomotion": {
+   "address": 607320,
+   "default": 0.009999999776482582,
+   "type": "f32"
+  },
   "FrameFrameTracker.min2dInliersForDepthEgomotion": {
    "address": 607308,
    "default": 80,
    "type": "i32"
   },
+  "FrameFrameTracker.min2dInliersPercentForDepthEgomotion": {
+   "address": 607312,
+   "default": 0.6000000238418579,
+   "type": "f32"
+  },
+  "FrameFrameTracker.min2dInliersResidualForDepthEgomotion": {
+   "address": 607316,
+   "default": 0.003000000026077032,
+   "type": "f32"
+  },
+  "FrameFrameTracker.min3dInlierSqThreshold": {
+   "address": 607304,
+   "default": 9.999999747378752e-05,
+   "type": "f32"
+  },
   "FrameFrameTracker.minDepthsForDepthEgomotion": {
    "address": 607300,
    "default": 10,
    "type": "i32"
+  },
+  "FramePoint.initialDepthCertaintyThreshold": {
+   "address": 613452,
+   "default": 4.000000053405728e-10,
+   "type": "f32"
+  },
+  "FramePoint.knownDepthCertainty": {
+   "address": 613460,
+   "default": 0.949999988079071,
+   "type": "f32"
+  },
+  "FramePoint.skypointsDistance": {
+   "address": 613456,
+   "default": 100.0,
+   "type": "f32"
   },
   "FramePoint.useInitialDepth": {
    "address": 613448,
@@ -160,6 +315,11 @@
    "default": 0,
    "type": "u8"
   },
+  "MapBuilder.existingToTriangulatedPointMaxDistance": {
+   "address": 606184,
+   "default": 0.10000000149011612,
+   "type": "f32"
+  },
   "MapBuilder.isPruningGroundPointsInMapTracking": {
    "address": 606224,
    "default": 1,
@@ -169,6 +329,11 @@
    "address": 606192,
    "default": 5,
    "type": "i32"
+  },
+  "MapBuilder.keyframeCountVariability": {
+   "address": 606200,
+   "default": 0.30000001192092896,
+   "type": "f32"
   },
   "MapBuilder.keyframeDelay": {
    "address": 606204,
@@ -189,6 +354,11 @@
    "address": 606216,
    "default": 3,
    "type": "i32"
+  },
+  "MapBuilder.keyframeVariabilityCriterion": {
+   "address": 606220,
+   "default": 0.8999999761581421,
+   "type": "f32"
   },
   "MapBuilder.loopCloseEnabled": {
    "address": 606264,
@@ -214,6 +384,21 @@
    "address": 606272,
    "default": 1,
    "type": "u8"
+  },
+  "MapBuilder.minBaselineForTwoVpsLocalizationScaling": {
+   "address": 606288,
+   "default": 0.009999999776482582,
+   "type": "f32"
+  },
+  "MapBuilder.minBaselineForVpsCorrection": {
+   "address": 606276,
+   "default": 0.30000001192092896,
+   "type": "f32"
+  },
+  "MapBuilder.minParallaxThreshold": {
+   "address": 606180,
+   "default": 0.019999999552965164,
+   "type": "f32"
   },
   "MapBuilder.minWorldPointMatchesForSkypoints": {
    "address": 606252,
@@ -245,10 +430,25 @@
    "default": 0,
    "type": "u8"
   },
+  "MapBuilder.pruningGroundPointsEpsilon": {
+   "address": 606228,
+   "default": 0.05000000074505806,
+   "type": "f32"
+  },
+  "MapBuilder.pruningGroundPointsTriangulatedCertaintyThreshold": {
+   "address": 606232,
+   "default": 0.0001,
+   "type": "f64"
+  },
   "MapBuilder.redundancyPointCount": {
    "address": 606296,
    "default": 3,
    "type": "i32"
+  },
+  "MapBuilder.redundancyPointPercentage": {
+   "address": 606300,
+   "default": 0.699999988079071,
+   "type": "f32"
   },
   "MapBuilder.relocToKfWithDepthPoints": {
    "address": 606285,
@@ -265,6 +465,11 @@
    "default": 1,
    "type": "u8"
   },
+  "MapBuilder.skypointsDistance": {
+   "address": 606268,
+   "default": 1000.0,
+   "type": "f32"
+  },
   "MapBuilder.useGraphToAnchorNodes": {
    "address": 606284,
    "default": 1,
@@ -274,6 +479,16 @@
    "address": 606286,
    "default": 1,
    "type": "u8"
+  },
+  "MapBuilder.vpsCorrectionConfidenceThreshold": {
+   "address": 606280,
+   "default": 0.6000000238418579,
+   "type": "f32"
+  },
+  "MapTracker.cloudMapMaxRelocalizationTimeDelayNanos": {
+   "address": 607232,
+   "default": 500000000.0,
+   "type": "f32"
   },
   "MapTracker.cloudMapRelocTargetFps": {
    "address": 607228,
@@ -289,6 +504,21 @@
    "address": 607208,
    "default": 10,
    "type": "i32"
+  },
+  "MapTracker.lowPassGroundHeightAlpha": {
+   "address": 607220,
+   "default": 0.4000000059604645,
+   "type": "f32"
+  },
+  "MapTracker.maxGyroMagnitude": {
+   "address": 607248,
+   "default": 70.0,
+   "type": "f32"
+  },
+  "MapTracker.maxLinearAccelerationMagnitude": {
+   "address": 607252,
+   "default": 1.7000000476837158,
+   "type": "f32"
   },
   "MapTracker.maxPoints": {
    "address": 607212,
@@ -315,10 +545,25 @@
    "default": 76,
    "type": "i32"
   },
+  "MapTracker.relocalizationThreshold": {
+   "address": 607224,
+   "default": 0.05000000074505806,
+   "type": "f32"
+  },
   "MapTracker.samplePointsForSecondPassTracking": {
    "address": 607268,
    "default": 1,
    "type": "u8"
+  },
+  "MapTracker.secretRelocalizationTimeDelayNanos": {
+   "address": 607236,
+   "default": 2000000000.0,
+   "type": "f32"
+  },
+  "MapTracker.trackingLostThreshold": {
+   "address": 607240,
+   "default": 0.004999999888241291,
+   "type": "f32"
   },
   "MapTracker.useExternalRelocalizationExtrinsic": {
    "address": 607260,
@@ -330,10 +575,25 @@
    "default": 1,
    "type": "u8"
   },
+  "MetricScaleEstimator.activeEndThreshold": {
+   "address": 606496,
+   "default": 0.5,
+   "type": "f32"
+  },
+  "MetricScaleEstimator.activeStartThreshold": {
+   "address": 606492,
+   "default": 1.0,
+   "type": "f32"
+  },
   "MetricScaleEstimator.activeThresholdCheck": {
    "address": 606484,
    "default": 0,
    "type": "u8"
+  },
+  "MetricScaleEstimator.addAccelToSumThreshold": {
+   "address": 606504,
+   "default": 0.800000011920929,
+   "type": "f32"
   },
   "MetricScaleEstimator.estimateScaleAfterHaveEstimate": {
    "address": 606452,
@@ -345,6 +605,21 @@
    "default": 1,
    "type": "u8"
   },
+  "MetricScaleEstimator.gyroResetThreshold": {
+   "address": 606520,
+   "default": 0.0,
+   "type": "f32"
+  },
+  "MetricScaleEstimator.imuGaussianSigma": {
+   "address": 606480,
+   "default": 0.0,
+   "type": "f32"
+  },
+  "MetricScaleEstimator.imuHighAccelThreshold": {
+   "address": 606512,
+   "default": 0.800000011920929,
+   "type": "f32"
+  },
   "MetricScaleEstimator.imuRemoveBias": {
    "address": 606516,
    "default": 0,
@@ -354,6 +629,26 @@
    "address": 606456,
    "default": 2000,
    "type": "i32"
+  },
+  "MetricScaleEstimator.maxFreqForAlignment": {
+   "address": 606472,
+   "default": 5.0,
+   "type": "f32"
+  },
+  "MetricScaleEstimator.maxScaleAllowed": {
+   "address": 606528,
+   "default": 2.25,
+   "type": "f32"
+  },
+  "MetricScaleEstimator.minScaleAllowed": {
+   "address": 606524,
+   "default": 0.05000000074505806,
+   "type": "f32"
+  },
+  "MetricScaleEstimator.movementCheckPeriodInSec": {
+   "address": 606488,
+   "default": 1.0,
+   "type": "f32"
   },
   "MetricScaleEstimator.numEndFramesToSkip": {
    "address": 606460,
@@ -385,6 +680,11 @@
    "default": 1,
    "type": "u8"
   },
+  "MetricScaleEstimator.sumCheckThreshold": {
+   "address": 606508,
+   "default": 600.0,
+   "type": "f32"
+  },
   "MetricScaleEstimator.temporalAlignment": {
    "address": 606468,
    "default": 1,
@@ -394,6 +694,31 @@
    "address": 606533,
    "default": 1,
    "type": "u8"
+  },
+  "MotionPrediction.aboveHorizonDrag": {
+   "address": 611888,
+   "default": 1.0,
+   "type": "f32"
+  },
+  "MotionPrediction.gravityCorrectedInterpolation": {
+   "address": 611884,
+   "default": 0.0,
+   "type": "f32"
+  },
+  "PosePnP.confidenceAreaRadius": {
+   "address": 608248,
+   "default": 0.15000000596046448,
+   "type": "f32"
+  },
+  "PosePnP.imageTrackingConfidenceThreshold": {
+   "address": 608244,
+   "default": 0.15000000596046448,
+   "type": "f32"
+  },
+  "PosePnP.relocalizationConfidenceThreshold": {
+   "address": 608240,
+   "default": 0.30000001192092896,
+   "type": "f32"
   },
   "PosePnP.solveOptimalPoseUseAnalytical": {
    "address": 608236,
@@ -409,6 +734,11 @@
    "address": 531844,
    "default": 0,
    "type": "u8"
+  },
+  "VioTracker.maxFirstSuccessfulDeviceVpsWaitTimeNanos": {
+   "address": 531856,
+   "default": 10000000000.0,
+   "type": "f32"
   },
   "VioTracker.numIncreasedFramePoints": {
    "address": 531848,
@@ -440,6 +770,16 @@
    "default": 1,
    "type": "u8"
   },
+  "WorldMap.maxCloudPointAdjustmentSqDistanceM": {
+   "address": 613368,
+   "default": 0.004900000058114529,
+   "type": "f32"
+  },
+  "WorldMap.maxInternalSquaredResidualForTriangulatedPts": {
+   "address": 613356,
+   "default": 0.010000000707805157,
+   "type": "f32"
+  },
   "WorldMap.requiredPointsForCovisibility": {
    "address": 613360,
    "default": 10,
@@ -460,6 +800,11 @@
    "default": 64,
    "type": "i32"
   },
+  "WorldMaps.cloudMapMatchRadiusMax": {
+   "address": 607984,
+   "default": 0.029999999329447746,
+   "type": "f32"
+  },
   "WorldMaps.cloudMapMaxSubsetPoints": {
    "address": 608036,
    "default": 100,
@@ -470,6 +815,11 @@
    "default": 1,
    "type": "u8"
   },
+  "WorldMaps.depthWeightCoef": {
+   "address": 608028,
+   "default": 1.0,
+   "type": "f32"
+  },
   "WorldMaps.enableLostLocalMatcher": {
    "address": 608099,
    "default": 1,
@@ -479,6 +829,11 @@
    "address": 608098,
    "default": 0,
    "type": "u8"
+  },
+  "WorldMaps.encouragedGroundPointWeight": {
+   "address": 608072,
+   "default": 0.550000011920929,
+   "type": "f32"
   },
   "WorldMaps.encouragedNGroundPoints": {
    "address": 608068,
@@ -495,6 +850,11 @@
    "default": 64,
    "type": "i32"
   },
+  "WorldMaps.loopClosingDistanceThreshold": {
+   "address": 607996,
+   "default": 80.0,
+   "type": "f32"
+  },
   "WorldMaps.loopClosingMatchesRequired": {
    "address": 608000,
    "default": 75,
@@ -505,10 +865,25 @@
    "default": 35,
    "type": "i32"
   },
+  "WorldMaps.lostMatcherRadius": {
+   "address": 607972,
+   "default": 0.10000000149011612,
+   "type": "f32"
+  },
   "WorldMaps.matchMinimum": {
    "address": 607976,
    "default": 5,
    "type": "i32"
+  },
+  "WorldMaps.matchRadiusMax": {
+   "address": 607980,
+   "default": 0.05000000074505806,
+   "type": "f32"
+  },
+  "WorldMaps.maxGyroMagnitudeKeyframe": {
+   "address": 607964,
+   "default": 80.0,
+   "type": "f32"
   },
   "WorldMaps.maxKeyframesInMap": {
    "address": 608092,
@@ -519,6 +894,21 @@
    "address": 608032,
    "default": 75,
    "type": "i32"
+  },
+  "WorldMaps.maxViewingAngleKfToCam": {
+   "address": 607968,
+   "default": 0.5,
+   "type": "f32"
+  },
+  "WorldMaps.minKeyframePairBaselineForVpsTriangulation": {
+   "address": 607992,
+   "default": 0.15000000596046448,
+   "type": "f32"
+  },
+  "WorldMaps.minWeightForDepthCertainty": {
+   "address": 608024,
+   "default": 0.0,
+   "type": "f32"
   },
   "WorldMaps.popCountMatchThreshold": {
    "address": 608132,
@@ -535,6 +925,16 @@
    "default": 1,
    "type": "u8"
   },
+  "WorldMaps.ransacInitialInlierGuess": {
+   "address": 608104,
+   "default": 0.009999999776482582,
+   "type": "f32"
+  },
+  "WorldMaps.ransacInlierThreshold": {
+   "address": 608108,
+   "default": 9.999999747378752e-05,
+   "type": "f32"
+  },
   "WorldMaps.ransacMaxNumIteration": {
    "address": 608120,
    "default": 2500,
@@ -545,15 +945,75 @@
    "default": 14,
    "type": "i32"
   },
+  "WorldMaps.requiredTenuredTrackingHitRatio": {
+   "address": 608076,
+   "default": 0.10000000149011612,
+   "type": "f32"
+  },
   "WorldMaps.requiredTrackingCount": {
    "address": 608080,
    "default": 8,
    "type": "i32"
   },
+  "WorldMaps.requiredTrackingHitRatio": {
+   "address": 608084,
+   "default": 0.25,
+   "type": "f32"
+  },
+  "WorldMaps.skypointWeightCoef": {
+   "address": 608008,
+   "default": 0.009999999776482582,
+   "type": "f32"
+  },
+  "WorldMaps.subsetConfidenceWeight": {
+   "address": 608064,
+   "default": 0.550000011920929,
+   "type": "f32"
+  },
+  "WorldMaps.subsetIsCloudPointWeight": {
+   "address": 608048,
+   "default": 1.0,
+   "type": "f32"
+  },
+  "WorldMaps.subsetIsDepthPointWeight": {
+   "address": 608044,
+   "default": 2.0,
+   "type": "f32"
+  },
+  "WorldMaps.subsetIsNonSkypointWeight": {
+   "address": 608052,
+   "default": 0.15000000596046448,
+   "type": "f32"
+  },
+  "WorldMaps.subsetIsTenuredWeight": {
+   "address": 608060,
+   "default": 0.20000000298023224,
+   "type": "f32"
+  },
+  "WorldMaps.subsetIsTriangulatedWeight": {
+   "address": 608040,
+   "default": 0.10000000149011612,
+   "type": "f32"
+  },
+  "WorldMaps.subsetLowerResidualWeight": {
+   "address": 608056,
+   "default": 0.75,
+   "type": "f32"
+  },
   "WorldMaps.tenureKeyframeCount": {
    "address": 608088,
    "default": 5,
    "type": "i32"
+  },
+  "WorldMaps.trustedDepthCertainty": {
+   "address": 608020,
+   "default": -4.0,
+   "type": "f32"
+  },
+  "WorldMaps.untrustedDepthCertainty": {
+   "address": 608016,
+   "default": -7.0,
+   "type": "f32"
   },
   "WorldMaps.weightByDepthConfidence": {
    "address": 608012,
