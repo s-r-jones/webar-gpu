@@ -1,0 +1,457 @@
+// Runs a tracker's feature front end on the live camera entirely in WebGPU compute: image
+// pyramid, corner score, one best corner per grid cell, orientation, 256-bit descriptor.
+// Only the keypoints and descriptors come back to the CPU. The page shows what that costs.
+
+// Pyramid step and level count match the 8th Wall engine's detector (c8/pixels/gr8-pyramid.h).
+const LEVEL_STEP = 1.44
+const LEVEL_COUNT = 4
+const BASE_WIDTH = 480
+// At most one keypoint per 16x16 cell. Corners nearer than 20 px to an edge are skipped
+// so the rotated descriptor patch (radius under 19 px) stays inside the image.
+const CELL = 16
+const BORDER = 20
+const KEYPOINT_BYTES = 16
+const DESCRIPTOR_BYTES = 32
+
+const SHARED = /* wgsl */`
+struct LevelInfo { size: vec2u, cells: vec2u, slotOffset: u32, threshold: f32 }
+struct Keypoint { position: vec2f, score: f32, angle: f32 }
+const CELL = ${CELL}u;
+const BORDER = ${BORDER}u;
+`
+
+const GRAY_FROM_CAMERA = /* wgsl */`
+@group(0) @binding(0) var camera: texture_external;
+@group(0) @binding(1) var cameraSampler: sampler;
+@group(0) @binding(2) var grayOut: texture_storage_2d<r32float, write>;
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  let size = textureDimensions(grayOut);
+  if (id.x >= size.x || id.y >= size.y) { return; }
+  let uv = (vec2f(id.xy) + 0.5) / vec2f(size);
+  let colour = textureSampleBaseClampToEdge(camera, cameraSampler, uv).rgb;
+  textureStore(grayOut, id.xy, vec4f(dot(colour, vec3f(0.299, 0.587, 0.114)), 0.0, 0.0, 1.0));
+}`
+
+// Smooths with a 3x3 kernel while shrinking, so the smaller level does not alias.
+const SHRINK = /* wgsl */`
+@group(0) @binding(0) var grayIn: texture_2d<f32>;
+@group(0) @binding(1) var grayOut: texture_storage_2d<r32float, write>;
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  let size = textureDimensions(grayOut);
+  if (id.x >= size.x || id.y >= size.y) { return; }
+  let sourceSize = vec2i(textureDimensions(grayIn));
+  let centre = vec2i((vec2f(id.xy) + 0.5) * vec2f(sourceSize) / vec2f(size));
+  var sum = 0.0;
+  for (var dy = -1; dy <= 1; dy++) {
+    for (var dx = -1; dx <= 1; dx++) {
+      let weight = f32((2 - abs(dx)) * (2 - abs(dy)));
+      let at = clamp(centre + vec2i(dx, dy), vec2i(0), sourceSize - 1);
+      sum += weight * textureLoad(grayIn, at, 0).r;
+    }
+  }
+  textureStore(grayOut, id.xy, vec4f(sum / 16.0, 0.0, 0.0, 1.0));
+}`
+
+// 5x5 binomial blur. Descriptors compare blurred pixels so single-pixel noise cannot flip bits.
+const BLUR = /* wgsl */`
+@group(0) @binding(0) var grayIn: texture_2d<f32>;
+@group(0) @binding(1) var blurOut: texture_storage_2d<r32float, write>;
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  let size = vec2i(textureDimensions(blurOut));
+  let at = vec2i(id.xy);
+  if (at.x >= size.x || at.y >= size.y) { return; }
+  var weights = array<f32, 5>(1.0, 4.0, 6.0, 4.0, 1.0);
+  var sum = 0.0;
+  for (var dy = -2; dy <= 2; dy++) {
+    for (var dx = -2; dx <= 2; dx++) {
+      let nearby = clamp(at + vec2i(dx, dy), vec2i(0), size - 1);
+      sum += weights[dx + 2] * weights[dy + 2] * textureLoad(grayIn, nearby, 0).r;
+    }
+  }
+  textureStore(blurOut, id.xy, vec4f(sum / 256.0, 0.0, 0.0, 1.0));
+}`
+
+// FAST-9 corner test: a pixel is a corner when 9 neighbouring pixels in a row on a radius-3
+// circle are all brighter or all darker than it by the threshold. Score is the total contrast.
+const CORNER_SCORE = /* wgsl */`
+${SHARED}
+@group(0) @binding(0) var grayIn: texture_2d<f32>;
+@group(0) @binding(1) var scoreOut: texture_storage_2d<r32float, write>;
+@group(0) @binding(2) var<uniform> level: LevelInfo;
+
+fn hasNineInARow(mask: u32) -> bool {
+  let doubled = mask | (mask << 16u);
+  var run = doubled;
+  for (var shift = 1u; shift <= 8u; shift++) {
+    run &= doubled >> shift;
+  }
+  return (run & 0xffffu) != 0u;
+}
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  let size = vec2i(textureDimensions(scoreOut));
+  let at = vec2i(id.xy);
+  if (at.x >= size.x || at.y >= size.y) { return; }
+  var circle = array<vec2i, 16>(
+    vec2i(0, -3), vec2i(1, -3), vec2i(2, -2), vec2i(3, -1), vec2i(3, 0), vec2i(3, 1),
+    vec2i(2, 2), vec2i(1, 3), vec2i(0, 3), vec2i(-1, 3), vec2i(-2, 2), vec2i(-3, 1),
+    vec2i(-3, 0), vec2i(-3, -1), vec2i(-2, -2), vec2i(-1, -3));
+  var score = 0.0;
+  if (at.x >= 3 && at.y >= 3 && at.x < size.x - 3 && at.y < size.y - 3) {
+    let centre = textureLoad(grayIn, at, 0).r;
+    var brighter = 0u;
+    var darker = 0u;
+    var contrast = 0.0;
+    for (var i = 0u; i < 16u; i++) {
+      let difference = textureLoad(grayIn, at + circle[i], 0).r - centre;
+      if (difference > level.threshold) { brighter |= 1u << i; }
+      if (difference < -level.threshold) { darker |= 1u << i; }
+      contrast += abs(difference);
+    }
+    if (hasNineInARow(brighter) || hasNineInARow(darker)) { score = contrast; }
+  }
+  textureStore(scoreOut, id.xy, vec4f(score, 0.0, 0.0, 1.0));
+}`
+
+// One invocation per grid cell: keeps the strongest corner in the cell. This fixes the
+// output size and spreads keypoints across the image without any sorting on the CPU.
+const SELECT = /* wgsl */`
+${SHARED}
+@group(0) @binding(0) var scoreIn: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> level: LevelInfo;
+@group(0) @binding(2) var<storage, read_write> keypoints: array<Keypoint>;
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  if (id.x >= level.cells.x || id.y >= level.cells.y) { return; }
+  let origin = vec2i(id.xy * CELL + BORDER);
+  var best = 0.0;
+  var bestAt = origin;
+  for (var y = 0; y < i32(CELL); y++) {
+    for (var x = 0; x < i32(CELL); x++) {
+      let score = textureLoad(scoreIn, origin + vec2i(x, y), 0).r;
+      if (score > best) {
+        best = score;
+        bestAt = origin + vec2i(x, y);
+      }
+    }
+  }
+  let slot = level.slotOffset + id.y * level.cells.x + id.x;
+  keypoints[slot] = Keypoint(vec2f(bestAt) + 0.5, best, 0.0);
+}`
+
+// One invocation per keypoint: orientation from the intensity centroid of a radius-15 patch
+// (as in ORB), then 256 brightness comparisons at pattern offsets rotated by that angle.
+const DESCRIBE = /* wgsl */`
+${SHARED}
+@group(0) @binding(0) var blurIn: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> level: LevelInfo;
+@group(0) @binding(2) var<storage, read_write> keypoints: array<Keypoint>;
+@group(0) @binding(3) var<storage, read_write> descriptors: array<array<u32, 8>>;
+@group(0) @binding(4) var<storage, read> comparisonPattern: array<vec4i, 256>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  if (id.x >= level.cells.x * level.cells.y) { return; }
+  let slot = level.slotOffset + id.x;
+  let keypoint = keypoints[slot];
+  if (keypoint.score == 0.0) { return; }
+  let centre = vec2i(keypoint.position);
+
+  var momentX = 0.0;
+  var momentY = 0.0;
+  for (var y = -15; y <= 15; y++) {
+    for (var x = -15; x <= 15; x++) {
+      if (x * x + y * y <= 225) {
+        let value = textureLoad(blurIn, centre + vec2i(x, y), 0).r;
+        momentX += f32(x) * value;
+        momentY += f32(y) * value;
+      }
+    }
+  }
+  let angle = atan2(momentY, momentX);
+  let cosine = cos(angle);
+  let sine = sin(angle);
+
+  var bits = array<u32, 8>(0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u);
+  for (var i = 0u; i < 256u; i++) {
+    let offsets = vec4f(comparisonPattern[i]);
+    let first = vec2i(round(vec2f(cosine * offsets.x - sine * offsets.y, sine * offsets.x + cosine * offsets.y)));
+    let second = vec2i(round(vec2f(cosine * offsets.z - sine * offsets.w, sine * offsets.z + cosine * offsets.w)));
+    if (textureLoad(blurIn, centre + first, 0).r < textureLoad(blurIn, centre + second, 0).r) {
+      bits[i / 32u] |= 1u << (i % 32u);
+    }
+  }
+  descriptors[slot] = bits;
+  keypoints[slot].angle = angle;
+}`
+
+const DRAW = /* wgsl */`
+${SHARED}
+// cover: how much of the camera picture fits the screen on each axis (the rest is cropped).
+// levels: for each pyramid level, its width, height and first keypoint slot.
+struct View { cover: vec2f, pointSize: vec2f, levels: array<vec4f, ${LEVEL_COUNT}> }
+
+@group(0) @binding(0) var camera: texture_external;
+@group(0) @binding(1) var cameraSampler: sampler;
+@group(0) @binding(2) var<uniform> view: View;
+@group(0) @binding(3) var<storage, read> keypoints: array<Keypoint>;
+
+struct Corner { @builtin(position) position: vec4f, @location(0) uv: vec2f }
+
+@vertex
+fn cameraVertex(@builtin(vertex_index) index: u32) -> Corner {
+  var corners = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  let corner = corners[index];
+  return Corner(vec4f(corner, 0.0, 1.0), vec2f(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5));
+}
+
+@fragment
+fn cameraFragment(in: Corner) -> @location(0) vec4f {
+  return textureSampleBaseClampToEdge(camera, cameraSampler, (in.uv - 0.5) * view.cover + 0.5);
+}
+
+struct Dot { @builtin(position) position: vec4f, @location(0) colour: vec3f }
+
+@vertex
+fn keypointVertex(@builtin(vertex_index) index: u32, @builtin(instance_index) slot: u32) -> Dot {
+  let keypoint = keypoints[slot];
+  var levelIndex = 0u;
+  for (var i = 1u; i < ${LEVEL_COUNT}u; i++) {
+    if (f32(slot) >= view.levels[i].z) { levelIndex = i; }
+  }
+  var corners = array<vec2f, 6>(
+    vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
+    vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0));
+  var colours = array<vec3f, ${LEVEL_COUNT}>(
+    vec3f(0.2, 1.0, 0.4), vec3f(1.0, 0.9, 0.1), vec3f(1.0, 0.5, 0.1), vec3f(1.0, 0.2, 0.6));
+  let inPicture = keypoint.position / view.levels[levelIndex].xy;
+  let onScreen = (inPicture - 0.5) / view.cover + 0.5;
+  let centre = vec2f(onScreen.x * 2.0 - 1.0, 1.0 - onScreen.y * 2.0);
+  let size = view.pointSize * (1.0 + 0.5 * f32(levelIndex));
+  var position = vec4f(centre + corners[index] * size, 0.0, 1.0);
+  // Empty cells are moved off screen.
+  if (keypoint.score == 0.0) { position = vec4f(2.0, 2.0, 2.0, 1.0); }
+  return Dot(position, colours[levelIndex]);
+}
+
+@fragment
+fn keypointFragment(in: Dot) -> @location(0) vec4f {
+  return vec4f(in.colour, 1.0);
+}`
+
+// 256 pairs of offsets, each coordinate drawn from a normal distribution (sigma 5 px,
+// clipped to 13 px) as in the original BRIEF descriptor. A fixed seed keeps descriptors
+// comparable between frames and sessions.
+function comparisonPattern() {
+  let state = 12345
+  const uniform = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    return (state + 1) / 4294967297
+  }
+  const normal = () => Math.sqrt(-2 * Math.log(uniform())) * Math.cos(2 * Math.PI * uniform())
+  return Int32Array.from({length: 256 * 4}, () => Math.max(-13, Math.min(13, Math.round(5 * normal()))))
+}
+
+function pyramidLevels(videoWidth, videoHeight) {
+  const levels = []
+  let slotOffset = 0
+  for (let i = 0; i < LEVEL_COUNT; i++) {
+    const width = Math.round(BASE_WIDTH / LEVEL_STEP ** i)
+    const height = Math.round(width * videoHeight / videoWidth)
+    const cellsX = Math.floor((width - 2 * BORDER) / CELL)
+    const cellsY = Math.floor((height - 2 * BORDER) / CELL)
+    levels.push({width, height, cellsX, cellsY, slotOffset})
+    slotOffset += cellsX * cellsY
+  }
+  return {levels, slotCount: slotOffset}
+}
+
+export async function startFeatureTest({canvas, video, onStats, onError}) {
+  const adapter = await navigator.gpu.requestAdapter()
+  const canTimeGpu = adapter.features.has('timestamp-query')
+  const device = await adapter.requestDevice({requiredFeatures: canTimeGpu ? ['timestamp-query'] : []})
+  device.addEventListener('uncapturederror', event => onError(event.error.message))
+
+  const context = canvas.getContext('webgpu')
+  const format = navigator.gpu.getPreferredCanvasFormat()
+  context.configure({device, format, alphaMode: 'opaque'})
+
+  const {levels, slotCount} = pyramidLevels(video.videoWidth, video.videoHeight)
+  const texture = ({width, height}) => device.createTexture({
+    size: [width, height],
+    format: 'r32float',
+    usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+  }).createView()
+  for (const level of levels) {
+    level.gray = texture(level)
+    level.blur = texture(level)
+    level.score = texture(level)
+    level.info = device.createBuffer({size: 24, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST})
+    const info = new DataView(new ArrayBuffer(24))
+    ;[level.width, level.height, level.cellsX, level.cellsY, level.slotOffset].forEach(
+      (value, i) => info.setUint32(4 * i, value, true))
+    // A corner must differ from its ring by 6% of full brightness (about 15 of 255).
+    info.setFloat32(20, 0.06, true)
+    device.queue.writeBuffer(level.info, 0, info)
+  }
+
+  const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+  const keypoints = device.createBuffer({size: slotCount * KEYPOINT_BYTES, usage: storage})
+  const descriptors = device.createBuffer({size: slotCount * DESCRIPTOR_BYTES, usage: storage})
+  const pattern = device.createBuffer({size: 256 * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST})
+  device.queue.writeBuffer(pattern, 0, comparisonPattern())
+
+  const resultBytes = slotCount * (KEYPOINT_BYTES + DESCRIPTOR_BYTES)
+  // Results are read back a frame or two after they are produced, so a few buffers rotate.
+  const freeReadbacks = [0, 1, 2].map(() => device.createBuffer({
+    size: resultBytes + 16,
+    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+  }))
+  const timing = canTimeGpu && {
+    queries: device.createQuerySet({type: 'timestamp', count: 2}),
+    resolved: device.createBuffer({size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC}),
+  }
+
+  const computePipeline = code => device.createComputePipeline({
+    layout: 'auto',
+    compute: {module: device.createShaderModule({code}), entryPoint: 'main'},
+  })
+  const pipelines = {
+    grayFromCamera: computePipeline(GRAY_FROM_CAMERA),
+    shrink: computePipeline(SHRINK),
+    blur: computePipeline(BLUR),
+    cornerScore: computePipeline(CORNER_SCORE),
+    select: computePipeline(SELECT),
+    describe: computePipeline(DESCRIBE),
+  }
+  const bind = (pipeline, resources) => device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: resources.map((resource, binding) => ({binding, resource})),
+  })
+  const sampler = device.createSampler({magFilter: 'linear', minFilter: 'linear'})
+  // Every pass except the first reads only textures this page owns, so its bindings never change.
+  for (const [i, level] of levels.entries()) {
+    level.passes = [
+      i > 0 && [pipelines.shrink, bind(pipelines.shrink, [levels[i - 1].gray, level.gray]), level.width, level.height, 8],
+      [pipelines.blur, bind(pipelines.blur, [level.gray, level.blur]), level.width, level.height, 8],
+      [pipelines.cornerScore, bind(pipelines.cornerScore, [level.gray, level.score, {buffer: level.info}]), level.width, level.height, 8],
+      [pipelines.select, bind(pipelines.select, [level.score, {buffer: level.info}, {buffer: keypoints}]), level.cellsX, level.cellsY, 8],
+      [pipelines.describe, bind(pipelines.describe, [level.blur, {buffer: level.info}, {buffer: keypoints}, {buffer: descriptors}, {buffer: pattern}]), level.cellsX * level.cellsY, 1, 64],
+    ].filter(Boolean)
+  }
+
+  const drawModule = device.createShaderModule({code: DRAW})
+  const drawPipeline = (vertex, fragment) => device.createRenderPipeline({
+    layout: 'auto',
+    vertex: {module: drawModule, entryPoint: vertex},
+    fragment: {module: drawModule, entryPoint: fragment, targets: [{format}]},
+  })
+  const cameraPipeline = drawPipeline('cameraVertex', 'cameraFragment')
+  const keypointPipeline = drawPipeline('keypointVertex', 'keypointFragment')
+  const view = device.createBuffer({size: 16 + 16 * LEVEL_COUNT, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST})
+
+  function writeView() {
+    canvas.width = canvas.clientWidth * Math.min(2, window.devicePixelRatio)
+    canvas.height = canvas.clientHeight * Math.min(2, window.devicePixelRatio)
+    const screenShape = canvas.width / canvas.height
+    const pictureShape = video.videoWidth / video.videoHeight
+    const cover = screenShape > pictureShape ? [1, pictureShape / screenShape] : [screenShape / pictureShape, 1]
+    const dot = 3 * Math.min(2, window.devicePixelRatio)
+    device.queue.writeBuffer(view, 0, new Float32Array([
+      ...cover, dot / canvas.width, dot / canvas.height,
+      ...levels.flatMap(level => [level.width, level.height, level.slotOffset, 0]),
+    ]))
+  }
+  writeView()
+  window.addEventListener('resize', writeView)
+
+  function frame() {
+    const startedAt = performance.now()
+    const cameraFrame = device.importExternalTexture({source: video})
+    const encoder = device.createCommandEncoder()
+
+    const compute = encoder.beginComputePass(timing ? {
+      timestampWrites: {querySet: timing.queries, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1},
+    } : {})
+    compute.setPipeline(pipelines.grayFromCamera)
+    compute.setBindGroup(0, bind(pipelines.grayFromCamera, [cameraFrame, sampler, levels[0].gray]))
+    compute.dispatchWorkgroups(Math.ceil(levels[0].width / 8), Math.ceil(levels[0].height / 8))
+    for (const level of levels) {
+      for (const [pipeline, bindGroup, countX, countY, groupSize] of level.passes) {
+        compute.setPipeline(pipeline)
+        compute.setBindGroup(0, bindGroup)
+        compute.dispatchWorkgroups(Math.ceil(countX / groupSize), countY === 1 ? 1 : Math.ceil(countY / groupSize))
+      }
+    }
+    compute.end()
+
+    const draw = encoder.beginRenderPass({
+      colorAttachments: [{view: context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store'}],
+    })
+    draw.setPipeline(cameraPipeline)
+    // The keypoint buffer is bound only where the shader stage uses it.
+    draw.setBindGroup(0, device.createBindGroup({
+      layout: cameraPipeline.getBindGroupLayout(0),
+      entries: [{binding: 0, resource: cameraFrame}, {binding: 1, resource: sampler}, {binding: 2, resource: {buffer: view}}],
+    }))
+    draw.draw(3)
+    draw.setPipeline(keypointPipeline)
+    draw.setBindGroup(0, device.createBindGroup({
+      layout: keypointPipeline.getBindGroupLayout(0),
+      entries: [{binding: 2, resource: {buffer: view}}, {binding: 3, resource: {buffer: keypoints}}],
+    }))
+    draw.draw(6, slotCount)
+    draw.end()
+
+    const readback = freeReadbacks.pop()
+    if (readback) {
+      encoder.copyBufferToBuffer(keypoints, 0, readback, 0, slotCount * KEYPOINT_BYTES)
+      encoder.copyBufferToBuffer(descriptors, 0, readback, slotCount * KEYPOINT_BYTES, slotCount * DESCRIPTOR_BYTES)
+      if (timing) {
+        encoder.resolveQuerySet(timing.queries, 0, 2, timing.resolved, 0)
+        encoder.copyBufferToBuffer(timing.resolved, 0, readback, resultBytes, 16)
+      }
+    }
+    device.queue.submit([encoder.finish()])
+    const mainThreadMs = performance.now() - startedAt
+
+    if (readback) {
+      readback.mapAsync(GPUMapMode.READ).then(() => {
+        const bytes = readback.getMappedRange()
+        const scores = new Float32Array(bytes, 0, slotCount * 4)
+        let keypointCount = 0
+        for (let slot = 0; slot < slotCount; slot++) {
+          if (scores[4 * slot + 2] > 0) {
+            keypointCount++
+          }
+        }
+        const [began, ended] = timing ? new BigUint64Array(bytes, resultBytes, 2) : []
+        onStats({
+          keypointCount,
+          mainThreadMs,
+          gpuMs: timing ? Number(ended - began) / 1e6 : null,
+          resultsAfterMs: performance.now() - startedAt,
+          readbackKilobytes: resultBytes / 1024,
+        })
+        readback.unmap()
+        freeReadbacks.push(readback)
+      })
+    }
+    nextFrame()
+  }
+
+  // Runs once per new camera frame where the browser can say so, else once per display frame.
+  const nextFrame = () => (video.requestVideoFrameCallback
+    ? video.requestVideoFrameCallback(frame)
+    : requestAnimationFrame(frame))
+  nextFrame()
+  return {levels, slotCount, canTimeGpu}
+}

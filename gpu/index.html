@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>GPU feature test</title>
+  <link rel="stylesheet" href="../style.css">
+  <script type="module" src="page.js"></script>
+</head>
+<body>
+  <video id="video" playsinline muted hidden></video>
+  <canvas id="camera"></canvas>
+  <dl id="readout" hidden>
+    <div><dt>Keypoints</dt><dd id="readout-keypoints">–</dd></div>
+    <div><dt>GPU ms</dt><dd id="readout-gpu">–</dd></div>
+    <div><dt>Main ms</dt><dd id="readout-main">–</dd></div>
+    <div><dt>Results ms</dt><dd id="readout-results">–</dd></div>
+    <div><dt>Frames/s</dt><dd id="readout-fps">–</dd></div>
+  </dl>
+  <section id="card"></section>
+</body>
+</html>
