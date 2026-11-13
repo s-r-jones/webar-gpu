@@ -22,6 +22,9 @@ function averages() {
   const seconds = (recentFrames.at(-1).at - recentFrames[0].at) / 1000
   return {
     keypoints: mean(recentFrames.map(frame => frame.keypointCount)),
+    matched: mean(recentFrames.map(frame => frame.matchedCount)),
+    longTracks: mean(recentFrames.map(frame => frame.longTrackCount)),
+    bitsDifferentPerMatch: mean(recentFrames.map(frame => frame.bitsDifferentPerMatch)),
     gpuMs: testInfo.canTimeGpu ? mean(recentFrames.map(frame => frame.gpuMs)) : null,
     mainThreadMs: mean(recentFrames.map(frame => frame.mainThreadMs)),
     resultsAfterMs: mean(recentFrames.map(frame => frame.resultsAfterMs)),
@@ -36,10 +39,10 @@ function updateReadout() {
   }
   const now = averages()
   document.getElementById('readout-keypoints').textContent = now.keypoints.toFixed(0)
+  document.getElementById('readout-matched').textContent = now.matched.toFixed(0)
+  document.getElementById('readout-long').textContent = now.longTracks.toFixed(0)
   document.getElementById('readout-gpu').textContent = now.gpuMs === null ? 'n/a' : now.gpuMs.toFixed(1)
   document.getElementById('readout-main').textContent = now.mainThreadMs.toFixed(1)
-  document.getElementById('readout-results').textContent = now.resultsAfterMs.toFixed(0)
-  document.getElementById('readout-fps').textContent = now.framesPerSecond.toFixed(0)
 }
 
 async function copyNumbers(button) {
@@ -49,6 +52,9 @@ async function copyNumbers(button) {
     navigator.userAgent,
     `Camera ${video.videoWidth}x${video.videoHeight}, pyramid ${testInfo.levels.map(level => `${level.width}x${level.height}`).join(' ')}`,
     `Keypoints per frame: ${now.keypoints.toFixed(0)} of ${testInfo.slotCount} cells`,
+    `Matched to the previous frame: ${now.matched.toFixed(0)} (${(100 * now.matched / now.keypoints).toFixed(0)}%)`,
+    `Followed for half a second or more: ${now.longTracks.toFixed(0)} (${(100 * now.longTracks / now.keypoints).toFixed(0)}%)`,
+    `Descriptor bits different per match: ${now.bitsDifferentPerMatch.toFixed(1)} of 256`,
     `GPU time per frame: ${now.gpuMs === null ? 'not measurable on this browser' : `${now.gpuMs.toFixed(2)} ms`}`,
     `Main-thread time per frame: ${now.mainThreadMs.toFixed(2)} ms`,
     `Results back on the CPU after: ${now.resultsAfterMs.toFixed(1)} ms`,
@@ -79,9 +85,10 @@ async function start() {
   setInterval(updateReadout, 250)
   showCard({
     title: 'GPU feature test',
-    text: `The dots are corners found and described on the GPU for every camera frame, up to ${testInfo.slotCount} a frame. ` +
-      'For comparison, 8th Wall\'s feature step on this iPhone took about 4.1 ms on the main thread ' +
-      'and reads 4,096 KB back from the GPU every frame.',
+    text: 'Corners are found, described and matched to the previous frame on the GPU. ' +
+      'Green dots have been followed for half a second or more, yellow for less, red are new. ' +
+      'Lines show how each followed corner moved since the last frame, drawn 8 times longer. ' +
+      'Move the phone slowly, then tap Copy numbers.',
     button: {label: 'Copy numbers', onTap: copyNumbers},
   })
 }
@@ -89,7 +96,7 @@ async function start() {
 if (navigator.gpu) {
   showCard({
     title: 'GPU feature test',
-    text: 'Finds and describes image corners on the GPU using the live camera, and shows what it costs per frame.',
+    text: 'Finds image corners and follows them from frame to frame on the GPU using the live camera, and shows what it costs.',
     button: {label: 'Start camera', onTap: () => start().catch(error => showCard({title: 'Could not start', text: error.message}))},
   })
 } else {

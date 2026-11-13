@@ -1,6 +1,8 @@
 // Runs a tracker's feature front end on the live camera entirely in WebGPU compute: image
-// pyramid, corner score, one best corner per grid cell, orientation, 256-bit descriptor.
-// Only the keypoints and descriptors come back to the CPU. The page shows what that costs.
+// pyramid, corner score, one best corner per grid cell, orientation, 256-bit descriptor,
+// then a match of every corner against the previous frame. Only the keypoints, descriptors
+// and matches come back to the CPU. The page shows what that costs and how well corners
+// are followed from frame to frame.
 
 // Pyramid step and level count match the 8th Wall engine's detector (c8/pixels/gr8-pyramid.h).
 const LEVEL_STEP = 1.44
@@ -10,12 +12,26 @@ const BASE_WIDTH = 480
 // so the rotated descriptor patch (radius under 19 px) stays inside the image.
 const CELL = 16
 const BORDER = 20
+// A corner is looked for up to 13% of the picture width from where it was last frame
+// (4 cells on the largest pyramid level).
+const SEARCH_REACH = 0.13
+// Lines on screen show one frame of motion drawn this many times longer.
+const MOTION_LINE_SCALE = 8
+// A match may differ in at most 64 of 256 descriptor bits and must beat the runner-up by a
+// fifth; ORB-SLAM's matcher uses 50 to 100 bits and a ratio of 0.6 to 0.9.
+const MATCH_BITS = 64
+// Half a second at 30 camera frames a second.
+const LONG_TRACK_FRAMES = 15
 const KEYPOINT_BYTES = 16
 const DESCRIPTOR_BYTES = 32
+const TRACK_BYTES = 16
 
 const SHARED = /* wgsl */`
 struct LevelInfo { size: vec2u, cells: vec2u, slotOffset: u32, threshold: f32 }
 struct Keypoint { position: vec2f, score: f32, angle: f32 }
+// previousPosition: where the corner was last frame. age: frames it has been followed for.
+// bitsDifferent: descriptor bits that differ from last frame.
+struct Track { previousPosition: vec2f, age: u32, bitsDifferent: u32 }
 const CELL = ${CELL}u;
 const BORDER = ${BORDER}u;
 `
@@ -210,6 +226,63 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   keypoints[slot].angle = angle;
 }`
 
+// One invocation per keypoint: finds the same corner in the previous frame by comparing
+// descriptors with the keypoints of nearby cells on the same pyramid level.
+const FOLLOW = /* wgsl */`
+${SHARED}
+@group(0) @binding(0) var<uniform> level: LevelInfo;
+@group(0) @binding(1) var<storage, read> keypoints: array<Keypoint>;
+@group(0) @binding(2) var<storage, read> descriptors: array<array<u32, 8>>;
+@group(0) @binding(3) var<storage, read> previousKeypoints: array<Keypoint>;
+@group(0) @binding(4) var<storage, read> previousDescriptors: array<array<u32, 8>>;
+@group(0) @binding(5) var<storage, read> previousTracks: array<Track>;
+@group(0) @binding(6) var<storage, read_write> tracks: array<Track>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+  if (id.x >= level.cells.x * level.cells.y) { return; }
+  let slot = level.slotOffset + id.x;
+  let keypoint = keypoints[slot];
+  var track = Track(keypoint.position, 0u, 256u);
+  if (keypoint.score > 0.0) {
+    let cells = vec2i(level.cells);
+    let cell = vec2i(i32(id.x) % cells.x, i32(id.x) / cells.x);
+    let reach = i32(ceil(f32(level.size.x) * ${SEARCH_REACH} / f32(CELL)));
+    var best = 256u;
+    var runnerUp = 256u;
+    var bestSlot = 0u;
+    var bestPosition = vec2f(-1000.0, -1000.0);
+    for (var dy = -reach; dy <= reach; dy++) {
+      for (var dx = -reach; dx <= reach; dx++) {
+        let nearby = cell + vec2i(dx, dy);
+        if (nearby.x < 0 || nearby.y < 0 || nearby.x >= cells.x || nearby.y >= cells.y) { continue; }
+        let nearbySlot = level.slotOffset + u32(nearby.y * cells.x + nearby.x);
+        let candidate = previousKeypoints[nearbySlot];
+        if (candidate.score == 0.0) { continue; }
+        var bitsDifferent = 0u;
+        for (var word = 0u; word < 8u; word++) {
+          bitsDifferent += countOneBits(descriptors[slot][word] ^ previousDescriptors[nearbySlot][word]);
+        }
+        // Two neighbouring cells can each pick a pixel of the same corner. Those are one
+        // candidate, not a rival, so they do not count as the runner-up.
+        let sameCorner = distance(candidate.position, bestPosition) < 6.0;
+        if (bitsDifferent < best) {
+          if (!sameCorner) { runnerUp = best; }
+          best = bitsDifferent;
+          bestSlot = nearbySlot;
+          bestPosition = candidate.position;
+        } else if (!sameCorner && bitsDifferent < runnerUp) {
+          runnerUp = bitsDifferent;
+        }
+      }
+    }
+    if (best <= ${MATCH_BITS}u && best * 10u < runnerUp * 8u) {
+      track = Track(bestPosition, previousTracks[bestSlot].age + 1u, best);
+    }
+  }
+  tracks[slot] = track;
+}`
+
 const DRAW = /* wgsl */`
 ${SHARED}
 // cover: how much of the camera picture fits the screen on each axis (the rest is cropped).
@@ -219,6 +292,7 @@ struct View { cover: vec2f, pointSize: vec2f, levels: array<vec4f, ${LEVEL_COUNT
 ${CAMERA}
 @group(0) @binding(2) var<uniform> view: View;
 @group(0) @binding(3) var<storage, read> keypoints: array<Keypoint>;
+@group(0) @binding(4) var<storage, read> tracks: array<Track>;
 
 struct Corner { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 
@@ -235,27 +309,58 @@ fn cameraFragment(in: Corner) -> @location(0) vec4f {
 }
 
 struct Dot { @builtin(position) position: vec4f, @location(0) colour: vec3f }
+const OFF_SCREEN = vec4f(2.0, 2.0, 2.0, 1.0);
 
-@vertex
-fn keypointVertex(@builtin(vertex_index) index: u32, @builtin(instance_index) slot: u32) -> Dot {
-  let keypoint = keypoints[slot];
+fn levelOf(slot: u32) -> u32 {
   var levelIndex = 0u;
   for (var i = 1u; i < ${LEVEL_COUNT}u; i++) {
     if (f32(slot) >= view.levels[i].z) { levelIndex = i; }
   }
+  return levelIndex;
+}
+
+fn onScreen(inLevel: vec2f, levelIndex: u32) -> vec2f {
+  let inPicture = inLevel / view.levels[levelIndex].xy;
+  let covered = (inPicture - 0.5) / view.cover + 0.5;
+  return vec2f(covered.x * 2.0 - 1.0, 1.0 - covered.y * 2.0);
+}
+
+// Red: new this frame. Yellow: followed for under half a second. Green: half a second or more.
+fn ageColour(age: u32) -> vec3f {
+  if (age >= ${LONG_TRACK_FRAMES}u) { return vec3f(0.2, 1.0, 0.4); }
+  if (age > 0u) { return vec3f(1.0, 0.9, 0.1); }
+  return vec3f(1.0, 0.25, 0.3);
+}
+
+@vertex
+fn keypointVertex(@builtin(vertex_index) index: u32, @builtin(instance_index) slot: u32) -> Dot {
+  let keypoint = keypoints[slot];
+  if (keypoint.score == 0.0) { return Dot(OFF_SCREEN, vec3f(0.0)); }
   var corners = array<vec2f, 6>(
     vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(-1.0, 1.0),
     vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0));
-  var colours = array<vec3f, ${LEVEL_COUNT}>(
-    vec3f(0.2, 1.0, 0.4), vec3f(1.0, 0.9, 0.1), vec3f(1.0, 0.5, 0.1), vec3f(1.0, 0.2, 0.6));
-  let inPicture = keypoint.position / view.levels[levelIndex].xy;
-  let onScreen = (inPicture - 0.5) / view.cover + 0.5;
-  let centre = vec2f(onScreen.x * 2.0 - 1.0, 1.0 - onScreen.y * 2.0);
+  let levelIndex = levelOf(slot);
   let size = view.pointSize * (1.0 + 0.5 * f32(levelIndex));
-  var position = vec4f(centre + corners[index] * size, 0.0, 1.0);
-  // Empty cells are moved off screen.
-  if (keypoint.score == 0.0) { position = vec4f(2.0, 2.0, 2.0, 1.0); }
-  return Dot(position, colours[levelIndex]);
+  let centre = onScreen(keypoint.position, levelIndex);
+  return Dot(vec4f(centre + corners[index] * size, 0.0, 1.0), ageColour(tracks[slot].age));
+}
+
+// A thin bar behind each followed corner: its motion since last frame, drawn longer.
+@vertex
+fn trackVertex(@builtin(vertex_index) index: u32, @builtin(instance_index) slot: u32) -> Dot {
+  let keypoint = keypoints[slot];
+  let track = tracks[slot];
+  let levelIndex = levelOf(slot);
+  let motion = keypoint.position - track.previousPosition;
+  let lineStart = onScreen(keypoint.position - motion * ${MOTION_LINE_SCALE}.0, levelIndex);
+  let lineEnd = onScreen(keypoint.position, levelIndex);
+  // Measured in dot sizes so the bar is equally thick in every direction.
+  let along = (lineEnd - lineStart) / view.pointSize;
+  if (keypoint.score == 0.0 || track.age == 0u || length(along) < 0.5) { return Dot(OFF_SCREEN, vec3f(0.0)); }
+  let across = normalize(vec2f(-along.y, along.x)) * view.pointSize * 0.3;
+  var ends = array<f32, 6>(0.0, 1.0, 0.0, 0.0, 1.0, 1.0);
+  var sides = array<f32, 6>(-1.0, -1.0, 1.0, 1.0, -1.0, 1.0);
+  return Dot(vec4f(mix(lineStart, lineEnd, ends[index]) + across * sides[index], 0.0, 1.0), ageColour(track.age));
 }
 
 @fragment
@@ -319,13 +424,20 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
     device.queue.writeBuffer(level.info, 0, info)
   }
 
-  const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-  const keypoints = device.createBuffer({size: slotCount * KEYPOINT_BYTES, usage: storage})
-  const descriptors = device.createBuffer({size: slotCount * DESCRIPTOR_BYTES, usage: storage})
+  const perSlotBuffer = bytesPerSlot => device.createBuffer({
+    size: slotCount * bytesPerSlot,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+  })
+  const keypoints = perSlotBuffer(KEYPOINT_BYTES)
+  const descriptors = perSlotBuffer(DESCRIPTOR_BYTES)
+  const tracks = perSlotBuffer(TRACK_BYTES)
+  const results = [keypoints, descriptors, tracks]
+  // Last frame's results, which this frame's corners are matched against.
+  const previousResults = [perSlotBuffer(KEYPOINT_BYTES), perSlotBuffer(DESCRIPTOR_BYTES), perSlotBuffer(TRACK_BYTES)]
   const pattern = device.createBuffer({size: 256 * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST})
   device.queue.writeBuffer(pattern, 0, comparisonPattern())
 
-  const resultBytes = slotCount * (KEYPOINT_BYTES + DESCRIPTOR_BYTES)
+  const resultBytes = slotCount * (KEYPOINT_BYTES + DESCRIPTOR_BYTES + TRACK_BYTES)
   // Results are read back a frame or two after they are produced, so a few buffers rotate.
   const freeReadbacks = [0, 1, 2].map(() => device.createBuffer({
     size: resultBytes + 16,
@@ -347,6 +459,7 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
     cornerScore: computePipeline(CORNER_SCORE),
     select: computePipeline(SELECT),
     describe: computePipeline(DESCRIBE),
+    follow: computePipeline(FOLLOW),
   }
   const bind = (pipeline, resources) => device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),
@@ -361,6 +474,7 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
       [pipelines.cornerScore, bind(pipelines.cornerScore, [level.gray, level.score, {buffer: level.info}]), level.width, level.height, 8],
       [pipelines.select, bind(pipelines.select, [level.score, {buffer: level.info}, {buffer: keypoints}]), level.cellsX, level.cellsY, 8],
       [pipelines.describe, bind(pipelines.describe, [level.blur, {buffer: level.info}, {buffer: keypoints}, {buffer: descriptors}, {buffer: pattern}]), level.cellsX * level.cellsY, 1, 64],
+      [pipelines.follow, bind(pipelines.follow, [{buffer: level.info}, ...[...results.slice(0, 2), ...previousResults, tracks].map(buffer => ({buffer}))]), level.cellsX * level.cellsY, 1, 64],
     ].filter(Boolean)
   }
 
@@ -372,6 +486,7 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
   })
   const cameraPipeline = drawPipeline('cameraVertex', 'cameraFragment')
   const keypointPipeline = drawPipeline('keypointVertex', 'keypointFragment')
+  const trackPipeline = drawPipeline('trackVertex', 'keypointFragment')
   const view = device.createBuffer({size: 16 + 16 * LEVEL_COUNT, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST})
 
   function writeView() {
@@ -388,6 +503,11 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
   }
   writeView()
   window.addEventListener('resize', writeView)
+  const keypointBindings = pipeline => device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [{binding: 2, resource: {buffer: view}}, {binding: 3, resource: {buffer: keypoints}}, {binding: 4, resource: {buffer: tracks}}],
+  })
+  const overlays = [trackPipeline, keypointPipeline].map(pipeline => [pipeline, keypointBindings(pipeline)])
 
   function frame() {
     const startedAt = performance.now()
@@ -413,28 +533,32 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
       colorAttachments: [{view: context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store'}],
     })
     draw.setPipeline(cameraPipeline)
-    // The keypoint buffer is bound only where the shader stage uses it.
     draw.setBindGroup(0, device.createBindGroup({
       layout: cameraPipeline.getBindGroupLayout(0),
       entries: [{binding: 0, resource: cameraFrame}, {binding: 1, resource: sampler}, {binding: 2, resource: {buffer: view}}],
     }))
     draw.draw(3)
-    draw.setPipeline(keypointPipeline)
-    draw.setBindGroup(0, device.createBindGroup({
-      layout: keypointPipeline.getBindGroupLayout(0),
-      entries: [{binding: 2, resource: {buffer: view}}, {binding: 3, resource: {buffer: keypoints}}],
-    }))
-    draw.draw(6, slotCount)
+    for (const [pipeline, bindings] of overlays) {
+      draw.setPipeline(pipeline)
+      draw.setBindGroup(0, bindings)
+      draw.draw(6, slotCount)
+    }
     draw.end()
 
     const readback = freeReadbacks.pop()
     if (readback) {
-      encoder.copyBufferToBuffer(keypoints, 0, readback, 0, slotCount * KEYPOINT_BYTES)
-      encoder.copyBufferToBuffer(descriptors, 0, readback, slotCount * KEYPOINT_BYTES, slotCount * DESCRIPTOR_BYTES)
+      let offset = 0
+      for (const result of results) {
+        encoder.copyBufferToBuffer(result, 0, readback, offset, result.size)
+        offset += result.size
+      }
       if (timing) {
         encoder.resolveQuerySet(timing.queries, 0, 2, timing.resolved, 0)
         encoder.copyBufferToBuffer(timing.resolved, 0, readback, resultBytes, 16)
       }
+    }
+    for (const [i, result] of results.entries()) {
+      encoder.copyBufferToBuffer(result, 0, previousResults[i], 0, result.size)
     }
     device.queue.submit([encoder.finish()])
     const mainThreadMs = performance.now() - startedAt
@@ -443,15 +567,30 @@ export async function startFeatureTest({canvas, video, onStats, onError}) {
       readback.mapAsync(GPUMapMode.READ).then(() => {
         const bytes = readback.getMappedRange()
         const scores = new Float32Array(bytes, 0, slotCount * 4)
+        const trackFields = new Uint32Array(bytes, slotCount * (KEYPOINT_BYTES + DESCRIPTOR_BYTES), slotCount * 4)
         let keypointCount = 0
+        let matchedCount = 0
+        let longTrackCount = 0
+        let bitsDifferentTotal = 0
         for (let slot = 0; slot < slotCount; slot++) {
           if (scores[4 * slot + 2] > 0) {
             keypointCount++
+            const age = trackFields[4 * slot + 2]
+            if (age > 0) {
+              matchedCount++
+              bitsDifferentTotal += trackFields[4 * slot + 3]
+            }
+            if (age >= LONG_TRACK_FRAMES) {
+              longTrackCount++
+            }
           }
         }
         const [began, ended] = timing ? new BigUint64Array(bytes, resultBytes, 2) : []
         onStats({
           keypointCount,
+          matchedCount,
+          longTrackCount,
+          bitsDifferentPerMatch: matchedCount ? bitsDifferentTotal / matchedCount : 0,
           mainThreadMs,
           gpuMs: timing ? Number(ended - began) / 1e6 : null,
           resultsAfterMs: performance.now() - startedAt,
