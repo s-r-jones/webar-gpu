@@ -78,6 +78,11 @@ const VERSIONS = [
     change: '3a + keyframes a third as often',
     settings: {...MORE_SOLVE_POINTS, ...FAST_GLOBAL_ADJUSTMENT, 'MapBuilder.keyframeCooldown': 15},
   },
+  {
+    name: 'Loop closing',
+    change: 'Crashes the engine; run it to copy a crash report',
+    settings: {'MapBuilder.loopCloseEnabled': 1},
+  },
 ]
 
 let trackerSettings = {}
@@ -183,9 +188,21 @@ const recorderModule = {
     }
   },
   onException: (error) => {
-    showFailure(error.permission
-      ? `Access to ${error.permission} was ${error.status}. Allow motion access for this site, then reload.`
-      : `The engine crashed: ${error.message || error}`)
+    if (error.permission) {
+      showFailure(`Access to ${error.permission} was ${error.status}. Allow motion access for this site, then reload.`)
+      return
+    }
+    // After a crash the engine keeps failing on every frame; only the first failure says why.
+    if (session.crashReport) {
+      return
+    }
+    session.crashReport = [
+      `Version ${session.version} ${JSON.stringify(trackerSettings)}`,
+      `${error.message || error}`,
+      `Engine messages: ${window.engineMessages.slice(-8).join(' | ')}`,
+      error.stack,
+    ].join('\n')
+    showFailure(`The engine crashed: ${error.message || error}`)
   },
 }
 
@@ -260,7 +277,17 @@ function showIntro() {
 }
 
 function showFailure(message) {
-  showCard({title: `Version ${session.version} stopped`, text: message})
+  showCard({
+    title: `Version ${session.version} stopped`,
+    text: message,
+    buttons: session.crashReport ? [{
+      label: 'Copy crash report',
+      onTap: async (button) => {
+        await navigator.clipboard.writeText(session.crashReport)
+        button.textContent = 'Copied'
+      },
+    }] : [],
+  })
 }
 
 // iOS only shows its motion-access prompt when asked directly from a tap, so this runs
