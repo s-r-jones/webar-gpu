@@ -269,7 +269,7 @@ function showIntro() {
       onTap: () => startCamera(index),
     })).concat({
       label: 'GPU feature test',
-      detail: 'Corners and descriptors computed on the GPU',
+      detail: 'Corners found and followed between frames on the GPU',
       secondary: true,
       onTap: () => { location.href = '../gpu/' },
     }),
