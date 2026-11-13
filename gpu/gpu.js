@@ -20,9 +20,26 @@ const CELL = ${CELL}u;
 const BORDER = ${BORDER}u;
 `
 
-const GRAY_FROM_CAMERA = /* wgsl */`
+// Safari hands WebGPU the camera sensor's own landscape frame even when the phone is held
+// upright; Chrome hands over the upright picture. The rear sensor's frame is the upright
+// picture turned a quarter turn anticlockwise (why iPhone portrait photos carry EXIF
+// orientation 6), so a frame whose shape disagrees with the video's is turned back here.
+const CAMERA = /* wgsl */`
 @group(0) @binding(0) var camera: texture_external;
 @group(0) @binding(1) var cameraSampler: sampler;
+
+fn cameraColour(upright: vec2f, uprightSize: vec2f) -> vec4f {
+  let frameSize = textureDimensions(camera);
+  var inFrame = upright;
+  if ((frameSize.x > frameSize.y) != (uprightSize.x > uprightSize.y)) {
+    inFrame = vec2f(upright.y, 1.0 - upright.x);
+  }
+  return textureSampleBaseClampToEdge(camera, cameraSampler, inFrame);
+}
+`
+
+const GRAY_FROM_CAMERA = /* wgsl */`
+${CAMERA}
 @group(0) @binding(2) var grayOut: texture_storage_2d<r32float, write>;
 
 @compute @workgroup_size(8, 8)
@@ -30,7 +47,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let size = textureDimensions(grayOut);
   if (id.x >= size.x || id.y >= size.y) { return; }
   let uv = (vec2f(id.xy) + 0.5) / vec2f(size);
-  let colour = textureSampleBaseClampToEdge(camera, cameraSampler, uv).rgb;
+  let colour = cameraColour(uv, vec2f(size)).rgb;
   textureStore(grayOut, id.xy, vec4f(dot(colour, vec3f(0.299, 0.587, 0.114)), 0.0, 0.0, 1.0));
 }`
 
@@ -199,8 +216,7 @@ ${SHARED}
 // levels: for each pyramid level, its width, height and first keypoint slot.
 struct View { cover: vec2f, pointSize: vec2f, levels: array<vec4f, ${LEVEL_COUNT}> }
 
-@group(0) @binding(0) var camera: texture_external;
-@group(0) @binding(1) var cameraSampler: sampler;
+${CAMERA}
 @group(0) @binding(2) var<uniform> view: View;
 @group(0) @binding(3) var<storage, read> keypoints: array<Keypoint>;
 
@@ -215,7 +231,7 @@ fn cameraVertex(@builtin(vertex_index) index: u32) -> Corner {
 
 @fragment
 fn cameraFragment(in: Corner) -> @location(0) vec4f {
-  return textureSampleBaseClampToEdge(camera, cameraSampler, (in.uv - 0.5) * view.cover + 0.5);
+  return cameraColour((in.uv - 0.5) * view.cover + 0.5, view.levels[0].xy);
 }
 
 struct Dot { @builtin(position) position: vec4f, @location(0) colour: vec3f }
